@@ -1,0 +1,3 @@
+C:\msys64\mingw64\bin\cmake.exe -E rm -f CMakeFiles\Parallel_Image_Convolution_Benchmark.dir/objects.a
+C:\msys64\mingw64\bin\ar.exe qc CMakeFiles\Parallel_Image_Convolution_Benchmark.dir/objects.a @CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\objects1.rsp
+C:\msys64\mingw64\bin\g++.exe -g -Wl,--whole-archive CMakeFiles\Parallel_Image_Convolution_Benchmark.dir/objects.a -Wl,--no-whole-archive -o Parallel_Image_Convolution_Benchmark.exe -Wl,--out-implib,libParallel_Image_Convolution_Benchmark.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\linkLibs.rsp
