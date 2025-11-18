@@ -4,6 +4,9 @@ project(ParallelConvolution)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# Disable Qt GUI components for OpenCV
+set(OpenCV_STATIC OFF)
+
 find_package(OpenMP REQUIRED)
 find_package(OpenCV REQUIRED)
 
