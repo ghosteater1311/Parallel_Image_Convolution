@@ -1,6 +1,8 @@
 file(REMOVE_RECURSE
-  "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolution.cpp.obj"
-  "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolution.cpp.obj.d"
+  "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionCpu.cpp.obj"
+  "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionCpu.cpp.obj.d"
+  "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionOmp.cpp.obj"
+  "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionOmp.cpp.obj.d"
   "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/main.cpp.obj"
   "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/main.cpp.obj.d"
   "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/utils.cpp.obj"

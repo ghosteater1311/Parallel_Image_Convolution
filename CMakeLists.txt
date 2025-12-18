@@ -14,7 +14,9 @@ include_directories(${OpenCV_INCLUDE_DIRS} include)
 
 add_executable(Parallel_Image_Convolution_Benchmark
     src/main.cpp
-    src/convolution.cpp
+    src/convolutionCpu.cpp
+    src/convolutionCuda.cu
+    src/convolutionOmp.cpp
     src/utils.cpp
 )
 

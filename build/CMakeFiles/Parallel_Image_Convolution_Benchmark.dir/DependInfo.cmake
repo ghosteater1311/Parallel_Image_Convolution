@@ -8,7 +8,8 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
-  "D:/HUST/GHWorkspace/Parallel_Image_Convolution_Benchmark/src/convolution.cpp" "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolution.cpp.obj" "gcc" "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolution.cpp.obj.d"
+  "D:/HUST/GHWorkspace/Parallel_Image_Convolution_Benchmark/src/convolutionCpu.cpp" "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionCpu.cpp.obj" "gcc" "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionCpu.cpp.obj.d"
+  "D:/HUST/GHWorkspace/Parallel_Image_Convolution_Benchmark/src/convolutionOmp.cpp" "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionOmp.cpp.obj" "gcc" "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionOmp.cpp.obj.d"
   "D:/HUST/GHWorkspace/Parallel_Image_Convolution_Benchmark/src/main.cpp" "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/main.cpp.obj" "gcc" "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/main.cpp.obj.d"
   "D:/HUST/GHWorkspace/Parallel_Image_Convolution_Benchmark/src/utils.cpp" "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/utils.cpp.obj" "gcc" "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/utils.cpp.obj.d"
   )

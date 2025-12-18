@@ -128,29 +128,53 @@ Parallel_Image_Convolution_Benchmark/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\build.make CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/build
 .PHONY : Parallel_Image_Convolution_Benchmark/fast
 
-src/convolution.obj: src/convolution.cpp.obj
-.PHONY : src/convolution.obj
+src/convolutionCpu.obj: src/convolutionCpu.cpp.obj
+.PHONY : src/convolutionCpu.obj
 
 # target to build an object file
-src/convolution.cpp.obj:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\build.make CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolution.cpp.obj
-.PHONY : src/convolution.cpp.obj
+src/convolutionCpu.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\build.make CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionCpu.cpp.obj
+.PHONY : src/convolutionCpu.cpp.obj
 
-src/convolution.i: src/convolution.cpp.i
-.PHONY : src/convolution.i
+src/convolutionCpu.i: src/convolutionCpu.cpp.i
+.PHONY : src/convolutionCpu.i
 
 # target to preprocess a source file
-src/convolution.cpp.i:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\build.make CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolution.cpp.i
-.PHONY : src/convolution.cpp.i
+src/convolutionCpu.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\build.make CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionCpu.cpp.i
+.PHONY : src/convolutionCpu.cpp.i
 
-src/convolution.s: src/convolution.cpp.s
-.PHONY : src/convolution.s
+src/convolutionCpu.s: src/convolutionCpu.cpp.s
+.PHONY : src/convolutionCpu.s
 
 # target to generate assembly for a file
-src/convolution.cpp.s:
-	$(MAKE) $(MAKESILENT) -f CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\build.make CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolution.cpp.s
-.PHONY : src/convolution.cpp.s
+src/convolutionCpu.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\build.make CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionCpu.cpp.s
+.PHONY : src/convolutionCpu.cpp.s
+
+src/convolutionOmp.obj: src/convolutionOmp.cpp.obj
+.PHONY : src/convolutionOmp.obj
+
+# target to build an object file
+src/convolutionOmp.cpp.obj:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\build.make CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionOmp.cpp.obj
+.PHONY : src/convolutionOmp.cpp.obj
+
+src/convolutionOmp.i: src/convolutionOmp.cpp.i
+.PHONY : src/convolutionOmp.i
+
+# target to preprocess a source file
+src/convolutionOmp.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\build.make CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionOmp.cpp.i
+.PHONY : src/convolutionOmp.cpp.i
+
+src/convolutionOmp.s: src/convolutionOmp.cpp.s
+.PHONY : src/convolutionOmp.s
+
+# target to generate assembly for a file
+src/convolutionOmp.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\build.make CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionOmp.cpp.s
+.PHONY : src/convolutionOmp.cpp.s
 
 src/main.obj: src/main.cpp.obj
 .PHONY : src/main.obj
@@ -209,9 +233,12 @@ help:
 	@echo ... edit_cache
 	@echo ... rebuild_cache
 	@echo ... Parallel_Image_Convolution_Benchmark
-	@echo ... src/convolution.obj
-	@echo ... src/convolution.i
-	@echo ... src/convolution.s
+	@echo ... src/convolutionCpu.obj
+	@echo ... src/convolutionCpu.i
+	@echo ... src/convolutionCpu.s
+	@echo ... src/convolutionOmp.obj
+	@echo ... src/convolutionOmp.i
+	@echo ... src/convolutionOmp.s
 	@echo ... src/main.obj
 	@echo ... src/main.i
 	@echo ... src/main.s

@@ -2435,3 +2435,365 @@ Real images have complex content. Synthetic images have KNOWN properties:
 ---
 
 *Last updated: During kernels.hpp implementation - Gabor filter*
+
+---
+
+# CONVOLUTION.HPP Development Notes
+
+> Notes from developing the convolution function declarations
+
+---
+
+## 17. convolveCPU() - CPU Single-Threaded Convolution
+
+### Function Signature
+```cpp
+double convolveCPU(
+    const cv::Mat& input,
+    const std::vector<float>& kernel,
+    int kernelSize,
+    cv::Mat& output
+);
+```
+
+### Parameter Explanation
+
+| Parameter | Type | Why This Way? |
+|-----------|------|---------------|
+| `input` | `const cv::Mat&` | `const` = won't modify. `&` = pass by reference (no copy of large image) |
+| `kernel` | `const std::vector<float>&` | Kernel weights from kernels.hpp. Read-only |
+| `kernelSize` | `int` | Kernel dimension (3 for 3×3). Needed because vector is 1D |
+| `output` | `cv::Mat&` | Result image. No `const` because we write to it |
+
+### Why Return `double`?
+This is a **benchmark** project. Returns execution time in milliseconds for easy comparison.
+
+### Why Use References (`&`)?
+```cpp
+const cv::Mat& input    // ✅ Good: no copy, can't accidentally modify
+cv::Mat input           // ❌ Bad: copies entire image (slow!)
+```
+
+For a 4K image (3840×2160×3 channels):
+- Copy = ~25 MB memory allocation + copy time
+- Reference = just 8 bytes (pointer)
+
+### Algorithm (Pseudocode)
+```
+For each pixel (x, y) in output:
+    sum = 0
+    For each kernel weight at (i, j):
+        sum += input[x+i, y+j] * kernel[i, j]
+    output[x, y] = sum
+```
+
+### Time Complexity
+```
+O(W × H × K²)
+```
+- W = image width
+- H = image height
+- K = kernel size
+
+For 4K image with 31×31 kernel:
+- Operations ≈ 3840 × 2160 × 961 ≈ **8 billion** multiply-adds!
+
+---
+
+## 18. convolveOMP() - OpenMP Multi-Threaded Convolution
+
+### What is OpenMP?
+OpenMP (Open Multi-Processing) is a parallel programming API that allows easy parallelization of loops across multiple CPU cores.
+
+### Key Insight: Embarrassingly Parallel
+Image convolution is **embarrassingly parallel** - each output pixel can be computed independently! No data dependencies between pixels.
+
+### Function Signature
+```cpp
+double convolveOMP(
+    const cv::Mat& input,
+    const std::vector<float>& kernel,
+    int kernelSize,
+    cv::Mat& output,
+    int numThreads = 0    // NEW: thread count control
+);
+```
+
+### How OpenMP Parallelizes Convolution
+```
+CPU Single-Thread (convolveCPU):
+┌─────────────────────────────────┐
+│  Core 0: Process ALL pixels     │  → Slow
+└─────────────────────────────────┘
+
+OpenMP Multi-Thread (convolveOMP):
+┌─────────────────────────────────┐
+│  Core 0: Rows 0-269             │
+│  Core 1: Rows 270-539           │
+│  Core 2: Rows 540-809           │  → 8× faster (on 8 cores)
+│  ...                            │
+│  Core 7: Rows 1890-2159         │
+└─────────────────────────────────┘
+```
+
+### New Parameter: `numThreads`
+
+| Value | Behavior |
+|-------|----------|
+| `0` (default) | Use all available cores (auto-detect) |
+| `1` | Single thread (same as CPU version) |
+| `4` | Use 4 threads |
+| `8` | Use 8 threads |
+
+### Why Control Thread Count?
+For benchmarking to test **scaling efficiency**:
+```
+Threads:  1    2    4    8    16
+Time(ms): 800  420  220  120  115  ← diminishing returns!
+```
+
+### Why Parallelize Rows (Not Columns)?
+- Images stored **row-major** in memory (row 0, then row 1, ...)
+- Processing consecutive rows = better **cache locality**
+- Each thread reads/writes contiguous memory blocks
+
+### Time Complexity
+```
+O(W × H × K² / P)
+```
+- P = number of threads/cores
+
+With 8 cores: 8 billion / 8 = **1 billion operations per core** (parallel)
+
+---
+
+## 19. convolveCUDA() - GPU CUDA Convolution
+
+### What is CUDA?
+CUDA (Compute Unified Device Architecture) is NVIDIA's parallel computing platform. It enables massive parallelism using thousands of GPU cores.
+
+### Function Signature
+```cpp
+double convolveCUDA(
+    const cv::Mat& input,
+    const std::vector<float>& kernel,
+    int kernelSize,
+    cv::Mat& output
+);
+```
+
+### GPU Execution Model
+```
+CPU (8 cores):          GPU (896 CUDA cores):
+┌────┬────┬────┬────┐   ┌─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┬─┐
+│ C0 │ C1 │ C2 │... │   │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │
+└────┴────┴────┴────┘   │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │ │
+                        │ ... 896 cores ...              │
+                        └─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┴─┘
+```
+
+- Image divided into **blocks** (e.g., 16×16 pixels each)
+- Each block runs on a **Streaming Multiprocessor (SM)**
+- Each pixel = **1 CUDA thread**
+- GTX 1650: 896 CUDA cores running in parallel
+
+### GPU Memory Hierarchy
+
+| Memory Type | Size | Speed | Scope |
+|-------------|------|-------|-------|
+| **Global Memory** | 4 GB | ~400 GB/s | All threads |
+| **Shared Memory** | 48 KB/SM | ~1.5 TB/s | Per block (cache kernel here!) |
+| **Registers** | 64K/SM | Fastest | Per thread |
+
+### Data Transfer Overhead (Important!)
+```
+CPU ──────────────────────────────> GPU
+        PCIe Bus (~8 GB/s)
+        
+1. Copy input image:  CPU → GPU
+2. Run convolution:   GPU compute
+3. Copy output image: GPU → CPU
+```
+
+**Warning:** For small images, transfer time may exceed compute time!
+
+### When GPU Wins vs Loses
+
+| Image Size | GPU Advantage |
+|------------|---------------|
+| Small (512×512) | ❌ CPU may be faster (GPU overhead) |
+| Medium (1024-2048) | ⚡ GPU starts winning |
+| Large (4096+) | ✅ GPU dominates |
+
+### Time Complexity
+```
+O(W × H × K² / C)
+```
+- C = CUDA cores (896 for GTX 1650)
+
+### Return Value
+Returns execution time in milliseconds **including memory transfer** - this is important for fair benchmarking!
+
+---
+
+*Last updated: During convolution.hpp implementation*
+
+---
+
+# TIMER.HPP Development Notes
+
+> Notes from developing the high-resolution timer utility
+
+---
+
+## 20. Why Use `<chrono>` for Timing?
+
+### Old Way (Don't use!)
+```cpp
+#include <ctime>
+clock_t start = clock();
+// ... work ...
+clock_t end = clock();
+double seconds = (double)(end - start) / CLOCKS_PER_SEC;
+```
+
+**Problems:**
+- Low resolution (often only milliseconds)
+- Measures CPU time, not wall-clock time
+- Not portable across platforms
+
+### Modern Way (C++11 `<chrono>`) ✅
+```cpp
+#include <chrono>
+auto start = std::chrono::high_resolution_clock::now();
+// ... work ...
+auto end = std::chrono::high_resolution_clock::now();
+```
+
+**Benefits:**
+- **High resolution**: Nanosecond precision on most systems
+- **Type-safe**: Compiler prevents unit mixing errors
+- **Portable**: Works on Windows, Linux, Mac
+
+---
+
+## 21. Understanding the Timer Class
+
+### Type Aliases
+```cpp
+using Clock = std::chrono::high_resolution_clock;
+using TimePoint = std::chrono::time_point<Clock>;
+```
+
+| Type | What It Is |
+|------|------------|
+| `high_resolution_clock` | The most precise clock available on the system |
+| `time_point` | A specific moment in time (like a timestamp) |
+
+### Member Variables
+```cpp
+TimePoint m_start;   // When start() was called
+TimePoint m_end;     // When stop() was called
+bool m_running;      // Is the timer currently running?
+```
+
+### Usage Pattern
+```cpp
+Timer timer;
+timer.start();           // Record start time
+// ... expensive operation ...
+timer.stop();            // Record end time
+double ms = timer.elapsedMilliseconds();
+```
+
+---
+
+## 22. Time Conversion Explained
+
+### Duration Cast
+```cpp
+auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
+    endTime - m_start
+);
+```
+
+**What happens:**
+1. `endTime - m_start` = duration (in clock ticks)
+2. `duration_cast<microseconds>` = convert to microseconds
+3. `.count()` = get the numeric value
+
+### Why Microseconds → Milliseconds?
+```cpp
+return duration.count() / 1000.0;  // μs to ms
+```
+
+We measure in **microseconds** for precision, then convert to **milliseconds** for readability.
+
+| Unit | Symbol | Value |
+|------|--------|-------|
+| Second | s | 1,000 ms |
+| Millisecond | ms | 1,000 μs |
+| Microsecond | μs | 1,000 ns |
+| Nanosecond | ns | base unit |
+
+---
+
+## 23. Timer Methods Summary
+
+| Method | Returns | Use Case |
+|--------|---------|----------|
+| `start()` | void | Begin timing |
+| `stop()` | void | End timing |
+| `elapsedMilliseconds()` | double | Standard benchmarking (ms) |
+| `elapsedSeconds()` | double | Long operations (>1s) |
+| `elapsedMicroseconds()` | double | Very fast operations |
+
+### Example Output Interpretation
+```
+elapsedMilliseconds() = 123.456
+                        ^^^  ^^^
+                        |    |
+                        |    +-- 456 microseconds
+                        +------- 123 milliseconds
+```
+
+---
+
+## 24. Why Return `double` Not `int`?
+
+```cpp
+double elapsedMilliseconds() const  // ✅ Good
+int elapsedMilliseconds() const     // ❌ Bad
+```
+
+**Reason:** Sub-millisecond precision!
+
+For fast operations:
+- `int`: 0 ms, 1 ms, 2 ms (coarse)
+- `double`: 0.234 ms, 1.567 ms (precise)
+
+When comparing CPU vs OMP vs CUDA, small differences matter!
+
+---
+
+## 25. Timer Usage in Convolution Functions
+
+```cpp
+double convolveCPU(const cv::Mat& input, ..., cv::Mat& output) 
+{
+    Timer timer;
+    timer.start();
+    
+    // ... convolution algorithm ...
+    
+    timer.stop();
+    return timer.elapsedMilliseconds();
+}
+```
+
+This is why our convolution functions return `double` - they return the timer result!
+
+---
+
+*Last updated: During timer.hpp implementation*
+
