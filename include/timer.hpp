@@ -1,94 +1,72 @@
 // Define timer.hpp
+// High-Resolution Timer Utilities (namespace-based)
+// Lightweight namespace functions and a small ScopedTimer RAII helper
+// for precise benchmarking using C++11 <chrono>.
+//
+// Usage examples:
+//   auto t0 = timer::now();
+//   // ... work ...
+//   double ms = timer::msBetween(t0, timer::now());
+//
+//   // or using RAII helper:
+//   timer::ScopedTimer st; // starts immediately
+//   // ... work ...
+//   double ms = st.elapsedMs();
+
 #ifndef TIMER_HPP
 #define TIMER_HPP
 
-// Include chrono for high-precision timing (Stop-watch timer class in C++ 11)
 #include <chrono>
 
-// Timer Class
-// Usage:
-//   Timer timer;
-//   timer.start();
-//   // ... code to measure ...
-//   timer.stop();
-//   double elapsed = timer.elapsedMilliseconds();
-//
-// Features:
-//   - High-resolution (nanosecond precision on most systems)
-//   - Simple start/stop interface
-//   - Returns time in milliseconds (double for sub-ms precision)
-
-class Timer 
+namespace timer 
 {
-    private:
-        // Type aliases for readability
-        using Clock = std::chrono::high_resolution_clock;
-        using TimePoint = std::chrono::time_point<Clock>;
+    using Clock = std::chrono::high_resolution_clock;
+    using TimePoint = std::chrono::time_point<Clock>;
 
-        TimePoint m_start;   // Start time
-        TimePoint m_end;     // End time
-        bool m_running;      // Is timer currently running?
+    // Return current high-resolution time point
+    inline TimePoint now() 
+    {
+        return Clock::now();
+    }
 
-    public:
-        // Constructor - initializes timer in stopped state
-        Timer() : m_running(false) {}
+    // Milliseconds between two time points (double, ms with fractional)
+    inline double msBetween(const TimePoint& start, const TimePoint& end) 
+    {
+        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+        return duration.count() / 1000.0;
+    }
 
-        // start() - Begin timing
-        // Records the current time as the start point.
-        // Can be called multiple times to reset the start point.
-        void start() 
-        {
-            m_start = Clock::now();
-            m_running = true;
-        }
+    // Milliseconds since start
+    inline double msSince(const TimePoint& start) 
+    {
+        return msBetween(start, now());
+    }
 
-        // stop() - End timing
-        // Records the current time as the end point.
-        // Must call start() before calling stop().
-        void stop() 
-        {
-            m_end = Clock::now();
-            m_running = false;
-        }
+    // Seconds between two time points
+    inline double secondsBetween(const TimePoint& start, const TimePoint& end) 
+    {
+        return msBetween(start, end) / 1000.0;
+    }
 
-        // elapsedMilliseconds() - Get elapsed time
-        // Returns the time between start() and stop() in milliseconds.
-        // If timer is still running, returns time since start().
-        // Returns double for sub-millisecond precision.
-        //
-        // Example:
-        //   123.456 means 123 ms and 456 microseconds
-        double elapsedMilliseconds() const 
-        {
-            TimePoint endTime = m_running ? Clock::now() : m_end;
+    // Microseconds between two time points
+    inline double usBetween(const TimePoint& start, const TimePoint& end) 
+    {
+        auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+        return duration.count() / 1000.0; // ns -> us
+    }
 
-            auto duration = std::chrono::duration_cast<std::chrono::microseconds>(
-                endTime - m_start
-            );
+    // Lightweight RAII helper that records start time on construction
+    // and provides elapsed time queries. No automatic logging/destruction
+    // side-effects to keep it simple and safe for benchmarking.
+    struct ScopedTimer 
+    {
+        TimePoint start;
+        ScopedTimer() : start(now()) {}
+        double elapsedMs() const { return msSince(start); }
+        double elapsedUs() const { return usBetween(start, now()); }
+        double elapsedSeconds() const { return secondsBetween(start, now()); }
+    };
+} 
 
-            return duration.count() / 1000.0;  // Convert μs to ms
-        }
+#endif 
 
-        // elapsedSeconds() - Get elapsed time in seconds
-        // Convenience method for longer operations.
-        // Returns double for sub-second precision.
-        double elapsedSeconds() const 
-        {
-            return elapsedMilliseconds() / 1000.0;
-        }
-
-        // elapsedMicroseconds() - Get elapsed time in microseconds
-        // For very fast operations needing maximum precision.
-        double elapsedMicroseconds() const 
-        {
-            TimePoint endTime = m_running ? Clock::now() : m_end;
-
-            auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                endTime - m_start
-            );
-
-            return duration.count() / 1000.0;  // Convert ns to μs
-        }
-};
-
-#endif

@@ -2792,8 +2792,104 @@ double convolveCPU(const cv::Mat& input, ..., cv::Mat& output)
 ```
 
 This is why our convolution functions return `double` - they return the timer result!
+ 
+---
+
+# TIMER.HPP: Namespace-based API Change
+
+During implementation we switched from a `Timer` class to a lightweight `timer` namespace API.
+
+Reasons:
+- Namespace functions are lightweight and give precise control (no per-object state required).
+- `timer::now()` + `timer::msBetween()` is convenient for manual timing with minimal code.
+- `timer::ScopedTimer` provides a minimal RAII helper when a scoped timer is desired.
+
+Usage examples:
+
+```cpp
+// Manual timing
+auto t0 = timer::now();
+// ... work ...
+double ms = timer::msBetween(t0, timer::now());
+
+// Scoped timing
+timer::ScopedTimer st;
+// ... work ...
+double elapsed = st.elapsedMs();
+```
+
+This change preserves the original goals (high-resolution timing and easy-to-use API) while simplifying the interface.
+
+*Last updated: During timer.hpp namespace update*
+
+# UTILS.HPP Development Notes
+
+> Notes from implementing basic utilities for image I/O and validation
 
 ---
 
-*Last updated: During timer.hpp implementation*
+## 26. Purpose of utils.hpp
+
+`utils.hpp` contains small, reusable helper functions used across the benchmark:
+- Loading and saving images (with safe type conversions)
+- Converting images to floating-point (`CV_32F`) for numerical operations
+- Ensuring output images are allocated with the correct shape and depth
+- Validating and normalizing kernels
+- Comparing images quantitatively (MSE, max absolute difference)
+
+All functions are implemented inline and header-only so they can be used from any compilation unit without needing a separate implementation file.
+
+---
+
+## 27. API Summary
+
+```cpp
+namespace utils {
+  cv::Mat loadImage(const std::string& path, int flags = cv::IMREAD_UNCHANGED, int outDepth = CV_32F);
+  bool saveImage(const std::string& path, const cv::Mat& image);
+  cv::Mat convertToFloat(const cv::Mat& src);
+  void ensureOutputLike(const cv::Mat& input, cv::Mat& output, int depth = CV_32F);
+
+  bool isValidKernel(const std::vector<float>& kernel, int ksize);
+  void normalizeKernel(std::vector<float>& kernel);
+
+  double computeMSE(const cv::Mat& a, const cv::Mat& b);
+  double computeMaxAbsDiff(const cv::Mat& a, const cv::Mat& b);
+  bool imagesNearEqual(const cv::Mat& a, const cv::Mat& b, double tol = 1e-3, double* outMaxDiff = nullptr, double* outMSE = nullptr);
+}
+```
+
+---
+
+## 28. Important Implementation Notes
+
+- `loadImage` returns an image converted to `CV_32F` by default. This keeps the image values as they were (e.g., 0-255 range) but allows floating point arithmetic.
+- `saveImage` attempts to convert float images to 8-bit for disk storage by scaling them between the observed min/max to the 0–255 range. This is convenient for visual inspection but not for saving exact float arrays (use cv::FileStorage for that).
+- `ensureOutputLike` simplifies allocation: convolution implementations can call it to make sure the output buffer exists and has correct type.
+- `isValidKernel` enforces odd kernel sizes and correct number of elements (ksize × ksize).
+- `normalizeKernel` divides by the sum unless the sum is effectively zero (protects against division by zero).
+
+---
+
+## 29. Comparing Images
+
+- `computeMSE` returns the mean squared error across all pixels and channels. Lower is better.
+- `computeMaxAbsDiff` returns the maximum absolute per-channel difference observed.
+- `imagesNearEqual` is a convenience wrapper returning `true` when the maximum absolute difference ≤ `tol`.
+
+### Example
+```cpp
+cv::Mat ref = utils::loadImage("ref.png");
+cv::Mat out = utils::loadImage("out.png");
+double maxd, mse;
+if (utils::imagesNearEqual(ref, out, 1e-2, &maxd, &mse)) {
+  std::cout << "Images are close: max=" << maxd << " mse=" << mse << "\n";
+} else {
+  std::cout << "Difference too large: max=" << maxd << " mse=" << mse << "\n";
+}
+```
+
+---
+
+*Last updated: During utils.hpp implementation*
 
