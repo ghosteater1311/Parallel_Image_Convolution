@@ -17,7 +17,6 @@ add_executable(Parallel_Image_Convolution_Benchmark
     src/convolutionCpu.cpp
     src/convolutionCuda.cu
     src/convolutionOmp.cpp
-    src/utils.cpp
 )
 
 target_link_libraries(Parallel_Image_Convolution_Benchmark

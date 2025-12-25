@@ -70,8 +70,7 @@ namespace utils
         return out;
     }
 
-    // ensureOutputLike: Make sure output Mat is allocated with the
-    //                  specified depth and same size/channels as input
+    // ensureOutputLike: Make sure output Mat is allocated with the specified depth and same size/channels as input
     inline void ensureOutputLike(const cv::Mat& input, cv::Mat& output, int depth = CV_32F)
     {
         int desiredType = CV_MAKETYPE(depth, input.channels());
@@ -82,7 +81,6 @@ namespace utils
     }
 
     // Kernel helpers
-
     inline bool isValidKernel(const std::vector<float>& kernel, int ksize)
     {
         return ksize > 0 && (ksize % 2 == 1) && ((int)kernel.size() == ksize * ksize);
@@ -154,4 +152,4 @@ namespace utils
     }
 } 
 
-#endif 
+#endif

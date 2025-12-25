@@ -113,27 +113,11 @@ CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionOmp.cpp.s: cm
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionOmp.cpp.s"
 	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\HUST\GHWorkspace\Parallel_Image_Convolution_Benchmark\src\convolutionOmp.cpp -o CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\src\convolutionOmp.cpp.s
 
-CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/utils.cpp.obj: CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/flags.make
-CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/utils.cpp.obj: CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/includes_CXX.rsp
-CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/utils.cpp.obj: D:/HUST/GHWorkspace/Parallel_Image_Convolution_Benchmark/src/utils.cpp
-CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/utils.cpp.obj: CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=D:\HUST\GHWorkspace\Parallel_Image_Convolution_Benchmark\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Building CXX object CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/utils.cpp.obj"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/utils.cpp.obj -MF CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\src\utils.cpp.obj.d -o CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\src\utils.cpp.obj -c D:\HUST\GHWorkspace\Parallel_Image_Convolution_Benchmark\src\utils.cpp
-
-CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/utils.cpp.i: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/utils.cpp.i"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E D:\HUST\GHWorkspace\Parallel_Image_Convolution_Benchmark\src\utils.cpp > CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\src\utils.cpp.i
-
-CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/utils.cpp.s: cmake_force
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/utils.cpp.s"
-	C:\msys64\ucrt64\bin\g++.exe $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S D:\HUST\GHWorkspace\Parallel_Image_Convolution_Benchmark\src\utils.cpp -o CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\src\utils.cpp.s
-
 # Object files for target Parallel_Image_Convolution_Benchmark
 Parallel_Image_Convolution_Benchmark_OBJECTS = \
 "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/main.cpp.obj" \
 "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionCpu.cpp.obj" \
-"CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionOmp.cpp.obj" \
-"CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/utils.cpp.obj"
+"CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionOmp.cpp.obj"
 
 # External object files for target Parallel_Image_Convolution_Benchmark
 Parallel_Image_Convolution_Benchmark_EXTERNAL_OBJECTS =
@@ -141,7 +125,6 @@ Parallel_Image_Convolution_Benchmark_EXTERNAL_OBJECTS =
 Parallel_Image_Convolution_Benchmark.exe: CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/main.cpp.obj
 Parallel_Image_Convolution_Benchmark.exe: CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionCpu.cpp.obj
 Parallel_Image_Convolution_Benchmark.exe: CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionOmp.cpp.obj
-Parallel_Image_Convolution_Benchmark.exe: CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/utils.cpp.obj
 Parallel_Image_Convolution_Benchmark.exe: CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/build.make
 Parallel_Image_Convolution_Benchmark.exe: C:/msys64/ucrt64/lib/libopencv_gapi.dll.a
 Parallel_Image_Convolution_Benchmark.exe: C:/msys64/ucrt64/lib/libopencv_stitching.dll.a
@@ -206,7 +189,7 @@ Parallel_Image_Convolution_Benchmark.exe: C:/msys64/ucrt64/lib/libmingwthrd.a
 Parallel_Image_Convolution_Benchmark.exe: CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/linkLibs.rsp
 Parallel_Image_Convolution_Benchmark.exe: CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/objects1.rsp
 Parallel_Image_Convolution_Benchmark.exe: CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=D:\HUST\GHWorkspace\Parallel_Image_Convolution_Benchmark\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_5) "Linking CXX executable Parallel_Image_Convolution_Benchmark.exe"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=D:\HUST\GHWorkspace\Parallel_Image_Convolution_Benchmark\build\CMakeFiles --progress-num=$(CMAKE_PROGRESS_4) "Linking CXX executable Parallel_Image_Convolution_Benchmark.exe"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles\Parallel_Image_Convolution_Benchmark.dir\link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.

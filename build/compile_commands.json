@@ -16,11 +16,5 @@
   "command": "C:\\msys64\\ucrt64\\bin\\g++.exe  @CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/includes_CXX.rsp -g -std=gnu++17 -fopenmp -o CMakeFiles\\Parallel_Image_Convolution_Benchmark.dir\\src\\convolutionOmp.cpp.obj -c D:\\HUST\\GHWorkspace\\Parallel_Image_Convolution_Benchmark\\src\\convolutionOmp.cpp",
   "file": "D:/HUST/GHWorkspace/Parallel_Image_Convolution_Benchmark/src/convolutionOmp.cpp",
   "output": "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionOmp.cpp.obj"
-},
-{
-  "directory": "D:/HUST/GHWorkspace/Parallel_Image_Convolution_Benchmark/build",
-  "command": "C:\\msys64\\ucrt64\\bin\\g++.exe  @CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/includes_CXX.rsp -g -std=gnu++17 -fopenmp -o CMakeFiles\\Parallel_Image_Convolution_Benchmark.dir\\src\\utils.cpp.obj -c D:\\HUST\\GHWorkspace\\Parallel_Image_Convolution_Benchmark\\src\\utils.cpp",
-  "file": "D:/HUST/GHWorkspace/Parallel_Image_Convolution_Benchmark/src/utils.cpp",
-  "output": "CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/utils.cpp.obj"
 }
 ]

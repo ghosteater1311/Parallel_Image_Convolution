@@ -2500,6 +2500,67 @@ For 4K image with 31×31 kernel:
 
 ---
 
+### Implementation Details (convolveCPU)
+
+- Input validation: check kernel shape with `utils::isValidKernel()` and that the input image is non-empty (`utils::convertToFloat()` returns a valid Mat). Throw `std::invalid_argument` for bad inputs so caller can handle errors early.
+- Conversion: the function converts input to `CV_32F` for consistent floating-point arithmetic and to avoid repeating conversions elsewhere.
+- Output allocation: `utils::ensureOutputLike(input, output, CV_32F)` guarantees `output` exists and has the correct type and shape.
+- Loop ordering: `for y` → `for x` → `for c` → `for ky` → `for kx`. This preserves row-major locality and produces contiguous writes to `output`.
+- Border policy: zero-padding (samples outside the image bounds are treated as 0 by skipping those kernel positions).
+- Kernel access: use a raw pointer `const float* kp = kernel.data()` and precompute `krow = (ky+half)*kernelSize` for fast indexing `kp[krow + (kx+half)]`.
+- Pixel access: use row pointers `in.ptr<float>(iy)` and index with `inRow[ix * C + c]` where `C` is channel count.
+- Timing: use `timer::ScopedTimer` to measure the runtime for a single call; the function returns elapsed milliseconds.
+
+### Annotated Example (3×3 image, 3×3 kernel)
+
+Assume grayscale image I and kernel K:
+
+I =
+```
+1 2 3
+4 5 6
+7 8 9
+```
+
+K =
+```
+0 1 0
+1 4 1
+0 1 0
+```
+
+We compute output at center pixel (y=1, x=1), channel c=0.
+
+- half = 1, kernel stored as kp = [0,1,0, 1,4,1, 0,1,0]
+- Sum over ky=-1..1, kx=-1..1 of I(y+ky, x+kx) * K(ky,kx)
+
+Step-by-step:
+- ky=-1 (iy=0): terms: 0*I(0,0) + 1*I(0,1) + 0*I(0,2) = 2
+- ky=0 (iy=1): terms: 1*I(1,0) + 4*I(1,1) + 1*I(1,2) = 4 + 20 + 6 = 30
+- ky=+1 (iy=2): terms: 0*I(2,0) + 1*I(2,1) + 0*I(2,2) = 8
+- Total = 2 + 30 + 8 = 40 → output(1,1) = 40
+
+Edge handling (top-left pixel (0,0)):
+- Kernel positions that fall outside image are skipped (treated as zero).
+
+### Debug checklist & common bugs
+
+- Off-by-one in kernel indexing: correct formula is `kp[(ky+half)*K + (kx+half)]`.
+- Boundary checks must use `if (ix < 0 || ix >= W)` (not `ix < W`).
+- Channel indexing for multi-channel images: use `inRow[ix * C + c]` where `C = in.channels()`.
+- If output is all zeros: verify conversion to float and correct indexing.
+
+### Testing suggestions
+
+- Identity kernel 1×1 = [1] → output should equal input.
+- Impulse test: input with single 1 at center should produce kernel values at output center.
+- Constant image with box kernel → same constant value in output.
+- Use `utils::imagesNearEqual()` with a small tolerance to compare CPU/OMP/CUDA results.
+
+### Timing & Benchmark notes
+
+- `convolveCPU()` returns single-run time in milliseconds. For reliable benchmarking, the runner should perform a couple of warm-up calls (to stabilize caches and JITs) and then measure `N` runs (e.g., N=10) and report mean/median/std.
+
 ## 18. convolveOMP() - OpenMP Multi-Threaded Convolution
 
 ### What is OpenMP?
