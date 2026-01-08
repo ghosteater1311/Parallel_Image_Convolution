@@ -3603,3 +3603,744 @@ Y-axis: Parallel efficiency (Speedup / NumThreads × 100%)
 
 *Last updated: After convolveOMP() implementation review*
 
+---
+
+## 19. CUDA GPU Acceleration Theory & Architecture
+
+### What is CUDA?
+
+**CUDA** = **Compute Unified Device Architecture**
+
+It's NVIDIA's **parallel computing platform** that enables you to run code on the **GPU** (Graphics Processing Unit) instead of the CPU. Unlike CPUs which have a few powerful cores optimized for sequential processing, GPUs have **hundreds or thousands of simpler cores** designed for massive parallelism.
+
+**Key Difference from CPU/OpenMP:**
+- **CPU (Ryzen 7 4800H)**: 8 powerful cores → Excellent for complex, sequential tasks
+- **GPU (GTX 1650)**: 896 CUDA cores → Excellent for simple, repetitive tasks executed in parallel
+
+**Mental Model:**
+- CPU = 8 very smart workers (can do complex math, logic, branching, context switching)
+- GPU = 896 simple workers (each does basic operations, but ALL work simultaneously on the same task)
+
+---
+
+### Your GPU Architecture: GTX 1650 (Turing)
+
+Let me explain your specific hardware in detail:
+
+```
+NVIDIA GeForce GTX 1650 (Turing Architecture, 2019)
+│
+├── Compute Capability: 7.5
+├── Total CUDA Cores: 896 cores
+│   └── Organized as: 14 Streaming Multiprocessors (SMs)
+│       └── Each SM contains: 64 CUDA cores
+│           → 14 SMs × 64 cores = 896 total CUDA cores
+│
+├── Clock Speeds:
+│   ├── Base Clock: 1485 MHz
+│   └── Boost Clock: 1665 MHz (dynamic)
+│
+├── Memory Architecture:
+│   ├── Global Memory (VRAM): 4 GB GDDR6
+│   │   ├── Memory Bus: 128-bit
+│   │   ├── Memory Clock: 8 Gbps effective
+│   │   └── Memory Bandwidth: ~128 GB/s (theoretical)
+│   │
+│   ├── Shared Memory: 64 KB per SM (manually managed cache)
+│   │   └── Total: 14 SMs × 64 KB = 896 KB
+│   │
+│   ├── L1 Cache: 128 KB per SM (automatic)
+│   │   └── Combined with Shared Memory (configurable split)
+│   │
+│   ├── L2 Cache: 1 MB (shared across all SMs)
+│   │
+│   └── Registers: 64K × 32-bit registers per SM
+│       └── Total: 14 SMs × 64K = ~3.5 MB register file
+│
+├── Execution Resources per SM:
+│   ├── 64 FP32 cores (single-precision floating point)
+│   ├── 8 Tensor cores (for AI/deep learning, not used in convolution)
+│   ├── 16 INT32 cores (integer operations)
+│   └── Maximum threads per SM: 1024 threads
+│
+└── Power: 75W TDP (no external power connector needed)
+```
+
+**Key Specifications:**
+- **Maximum threads per block**: 1024
+- **Maximum blocks per SM**: 16
+- **Warp size**: 32 threads (execute in lockstep)
+- **Maximum threads in flight**: 14 SMs × 1024 = 14,336 threads simultaneously
+
+---
+
+### CUDA Execution Model: Threads, Blocks, Grids
+
+This is the fundamental mental model for CUDA programming.
+
+#### **Hierarchy:**
+
+```
+Grid (covers entire problem space, e.g., entire image)
+│
+├── Block 0 (a tile of the problem, e.g., 16×16 pixels)
+│   ├── Warp 0 (32 threads executing in lockstep)
+│   │   ├── Thread (0,0) → Processes pixel at block position (0,0)
+│   │   ├── Thread (0,1) → Processes pixel at block position (0,1)
+│   │   └── ... (32 threads in warp)
+│   │
+│   ├── Warp 1 (next 32 threads)
+│   │   └── ... 32 threads
+│   │
+│   └── ... (256 threads total in this block)
+│
+├── Block 1 (next tile of 16×16 pixels)
+│   └── ... 256 threads
+│
+└── Block N (final tile)
+    └── ... threads
+```
+
+#### **Concrete Example: 512×512 Image Convolution**
+
+```
+Problem: Convolve a 512×512 RGB image with 5×5 kernel
+
+Configuration:
+- Block Size: 16×16 threads = 256 threads per block
+- Grid Size: (512/16) × (512/16) = 32 × 32 = 1,024 blocks
+- Total Threads: 1,024 blocks × 256 threads = 262,144 threads
+
+Visual Grid Layout (each cell is a block):
+┌─────┬─────┬─────┬───┬─────┐
+│ 0,0 │ 0,1 │ 0,2 │...│ 0,31│  ← 32 blocks wide
+├─────┼─────┼─────┼───┼─────┤
+│ 1,0 │ 1,1 │ ... │   │     │
+├─────┼─────┼─────┼───┼─────┤
+│ ... │ ... │ ... │...│ ... │
+├─────┼─────┼─────┼───┼─────┤
+│31,0 │     │     │...│31,31│  ← 32 blocks tall
+└─────┴─────┴─────┴───┴─────┘
+
+Each block processes a 16×16 pixel tile
+Each thread processes exactly 1 pixel
+All 262,144 threads run in parallel!
+```
+
+**Execution Flow:**
+1. CUDA runtime divides 1,024 blocks among 14 SMs
+2. Each SM executes multiple blocks concurrently
+3. Within each block, threads are grouped into warps (32 threads)
+4. Each warp executes instructions in lockstep (SIMT = Single Instruction, Multiple Threads)
+
+---
+
+### Thread-to-Pixel Mapping
+
+Every thread must determine: **Which pixel am I responsible for?**
+
+CUDA provides built-in variables to calculate this:
+
+```cpp
+// Built-in variables (automatically provided by CUDA runtime):
+threadIdx.x, threadIdx.y  // Thread's position within its block (0 to blockDim-1)
+blockIdx.x, blockIdx.y    // Block's position within grid (0 to gridDim-1)
+blockDim.x, blockDim.y    // Size of each block (e.g., 16×16)
+gridDim.x, gridDim.y      // Size of grid in blocks (e.g., 32×32)
+
+// Calculate global pixel coordinates:
+int x = blockIdx.x * blockDim.x + threadIdx.x;  // Column (0 to W-1)
+int y = blockIdx.y * blockDim.y + threadIdx.y;  // Row (0 to H-1)
+```
+
+**Worked Example:**
+
+```
+Block ID: (5, 10)
+Thread ID within block: (3, 7)
+Block Dimension: (16, 16)
+
+Calculation:
+x = blockIdx.x * blockDim.x + threadIdx.x
+  = 5 * 16 + 3
+  = 83
+
+y = blockIdx.y * blockDim.y + threadIdx.y
+  = 10 * 16 + 7
+  = 167
+
+→ This thread processes pixel at image position (83, 167)
+```
+
+**Boundary Checking (Critical!):**
+```cpp
+int x = blockIdx.x * blockDim.x + threadIdx.x;
+int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+if (x >= W || y >= H) return;  // Guard against threads beyond image boundary
+// This happens when image size is not perfectly divisible by block size
+```
+
+---
+
+### Memory Hierarchy - The Performance Bottleneck
+
+Understanding GPU memory hierarchy is **CRITICAL** for performance. Memory access patterns determine whether your kernel runs fast or slow.
+
+#### **Memory Types and Characteristics:**
+
+| Memory Type | Size (GTX 1650) | Latency | Bandwidth | Scope | Managed By |
+|-------------|-----------------|---------|-----------|-------|------------|
+| **Registers** | 256 KB per SM | **1 cycle** | ~10 TB/s | Per-thread | Compiler (automatic) |
+| **Shared Memory** | 64 KB per SM | **~5 cycles** | ~1 TB/s | Per-block (all threads in block) | Programmer (manual) |
+| **L1 Cache** | 128 KB per SM | **~20 cycles** | ~500 GB/s | Per-SM | Hardware (automatic) |
+| **L2 Cache** | 1 MB | **~200 cycles** | ~200 GB/s | All SMs | Hardware (automatic) |
+| **Global Memory** | 4 GB GDDR6 | **~400 cycles** | ~128 GB/s | All threads | Programmer (manual) |
+| **Constant Cache** | 64 KB | ~5 cycles | High | All threads (read-only) | Programmer (manual) |
+| **Texture Cache** | Varies | ~20 cycles | High | All threads (read-only) | Programmer (manual) |
+
+#### **Relative Speed Comparison:**
+
+```
+Registers:        1× (baseline, fastest)
+Shared Memory:    5× slower    (~5 cycles)
+L1 Cache:        20× slower    (~20 cycles)
+L2 Cache:       200× slower    (~200 cycles)
+Global Memory:  400× slower    (~400 cycles) 🐌 SLOWEST!
+```
+
+#### **Memory Access Patterns:**
+
+**Bad Pattern (Uncoalesced Access):**
+```cpp
+// Threads in warp access random addresses
+Thread 0: reads address 1000
+Thread 1: reads address 5000  ← Far apart!
+Thread 2: reads address 2000
+// Result: Multiple memory transactions → SLOW (400 cycles each)
+```
+
+**Good Pattern (Coalesced Access):**
+```cpp
+// Threads in warp access consecutive addresses
+Thread 0: reads address 1000
+Thread 1: reads address 1004  ← Adjacent!
+Thread 2: reads address 1008
+// Result: Single memory transaction → FAST (400 cycles for entire warp)
+```
+
+---
+
+### The Convolution Memory Problem
+
+#### **Naive Approach (Slow):**
+
+```cpp
+__global__ void convolveNaive(float* input, float* kernel, float* output, 
+                              int W, int H, int C, int ksize)
+{
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    
+    if (x >= W || y >= H) return;
+    
+    int half = ksize / 2;
+    float sum = 0.0f;
+    
+    // For 5×5 kernel: 25 iterations per thread
+    for (int ky = -half; ky <= half; ky++) {
+        for (int kx = -half; kx <= half; kx++) {
+            int ix = x + kx;
+            int iy = y + ky;
+            
+            if (ix >= 0 && ix < W && iy >= 0 && iy < H) {
+                // ❌ PROBLEM: Every thread reads from GLOBAL MEMORY (slow!)
+                float pixel = input[iy * W + ix];  // ~400 cycles
+                float kval = kernel[(ky + half) * ksize + (kx + half)];
+                sum += pixel * kval;
+            }
+        }
+    }
+    
+    output[y * W + x] = sum;
+}
+```
+
+**Performance Analysis:**
+- **5×5 kernel**: Each thread does 25 Global Memory reads
+- **512×512 image**: 262,144 threads
+- **Total Global Memory reads**: 262,144 × 25 = 6.5 million reads!
+- **Time per read**: ~400 cycles = ~0.24 µs (at 1665 MHz)
+- **Sequential time**: 6.5M × 0.24 µs = 1,560,000 µs = **1.56 seconds!**
+- **With parallelism** (896 cores): ~1.74 ms
+- **Memory bandwidth bottleneck**: Can't achieve full theoretical speedup
+
+---
+
+### Shared Memory Optimization
+
+**Strategy:** Use Shared Memory as a manually-managed cache to reduce Global Memory accesses.
+
+#### **Concept:**
+
+```
+Without Shared Memory:
+Each thread → Reads 25 pixels → From Global Memory (slow)
+262,144 threads × 25 reads = 6.5M Global Memory accesses
+
+With Shared Memory:
+Step 1: Block of 256 threads → Cooperatively load tile → From Global to Shared
+Step 2: Each thread → Reads 25 pixels → From Shared Memory (fast)
+1,024 blocks × 256 cooperative loads + 262,144 threads × 25 Shared reads
+= 262,144 Global + 6.5M Shared (80× faster!)
+```
+
+#### **Tile Loading with Halo Regions:**
+
+For convolution, threads need neighboring pixels. We need to load a tile **plus border** (halo):
+
+```
+Block processes 16×16 output pixels
+But needs to READ (16+4)×(16+4) = 20×20 input pixels (for 5×5 kernel)
+
+Visual:
+┌─────────────────────┐
+│  H  H  H  H  H  H  │  ← Halo (border, needed for convolution)
+│  H ┌─────────────┐ H│
+│  H │             │ H│
+│  H │   16×16     │ H│  ← Core tile (actual output pixels)
+│  H │   Output    │ H│
+│  H │             │ H│
+│  H └─────────────┘ H│
+│  H  H  H  H  H  H  │
+└─────────────────────┘
+
+Halo width = kernel radius = kernelSize / 2
+Total tile size = (blockDim + 2 * halo) × (blockDim + 2 * halo)
+```
+
+#### **Optimized Kernel Skeleton:**
+
+```cpp
+#define BLOCK_SIZE 16
+#define HALO 2  // For 5×5 kernel (5/2 = 2)
+#define TILE_SIZE (BLOCK_SIZE + 2*HALO)  // 20×20
+
+__global__ void convolveShared(float* input, float* kernel, float* output,
+                               int W, int H, int C, int ksize)
+{
+    // Shared Memory: Fast cache visible to all threads in block
+    __shared__ float tile[TILE_SIZE][TILE_SIZE];
+    
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    
+    // Step 1: Cooperatively load tile (including halo) into Shared Memory
+    int tileX = threadIdx.x + HALO;  // Position in tile (offset by halo)
+    int tileY = threadIdx.y + HALO;
+    
+    // Load center (each thread loads one pixel)
+    if (x < W && y < H) {
+        tile[tileY][tileX] = input[y * W + x];
+    } else {
+        tile[tileY][tileX] = 0.0f;  // Zero-padding
+    }
+    
+    // Load halo regions (border threads load extra pixels)
+    // ... (detailed implementation needed)
+    
+    __syncthreads();  // ← CRITICAL: Wait for all threads to finish loading
+    
+    // Step 2: Compute convolution using Shared Memory
+    if (x >= W || y >= H) return;
+    
+    float sum = 0.0f;
+    int half = ksize / 2;
+    
+    for (int ky = -half; ky <= half; ky++) {
+        for (int kx = -half; kx <= half; kx++) {
+            // ✅ FAST: Read from Shared Memory (5 cycles vs 400!)
+            float pixel = tile[tileY + ky][tileX + kx];
+            float kval = kernel[(ky + half) * ksize + (kx + half)];
+            sum += pixel * kval;
+        }
+    }
+    
+    output[y * W + x] = sum;
+}
+```
+
+**Performance Gain:**
+- Naive: 6.5M Global Memory reads
+- Optimized: ~262K Global Memory reads (tile loads) + 6.5M Shared Memory reads
+- **Speedup: ~20-25× faster** for memory-bound kernels!
+
+---
+
+### Memory Transfer: CPU ↔ GPU Communication
+
+**The Hidden Cost:** GPU has **separate memory** from CPU. Data must be transferred via PCIe bus.
+
+#### **System Architecture:**
+
+```
+┌──────────────────────┐         PCIe 3.0 x16         ┌──────────────────────┐
+│   CPU (Host)         │ ←────────────────────────→  │   GPU (Device)       │
+│                      │    ~8-16 GB/s bandwidth      │                      │
+│  - Ryzen 7 4800H     │                              │  - GTX 1650          │
+│  - 8 cores           │                              │  - 896 CUDA cores    │
+│  - RAM: 32 GB DDR4   │                              │  - VRAM: 4 GB GDDR6  │
+│  - ~25 GB/s bandwidth│                              │  - ~128 GB/s bandwidth│
+└──────────────────────┘                              └──────────────────────┘
+        ↑                                                       ↑
+    Data lives here                                     Data lives here
+    (OpenCV Mat, std::vector)                          (cudaMalloc pointers)
+```
+
+**PCIe Bottleneck:**
+- Theoretical: PCIe 3.0 x16 = 16 GB/s
+- Effective: ~8-12 GB/s (real-world overhead)
+- **This is 10× slower than GPU memory bandwidth!**
+
+#### **Required Workflow:**
+
+```cpp
+double convolveCUDA(const cv::Mat& input, const std::vector<float>& kernel,
+                    int kernelSize, cv::Mat& output)
+{
+    timer::ScopedTimer st;  // Start timing
+    
+    // Step 0: Prepare data (CPU side)
+    cv::Mat in = utils::convertToFloat(input);
+    utils::ensureOutputLike(in, output, CV_32F);
+    int W = in.cols, H = in.rows, C = in.channels();
+    size_t imageSize = W * H * C * sizeof(float);
+    size_t kernelSizeBytes = kernelSize * kernelSize * sizeof(float);
+    
+    // Step 1: Allocate GPU memory
+    float *d_input, *d_kernel, *d_output;
+    cudaMalloc(&d_input, imageSize);        // Allocate input on GPU
+    cudaMalloc(&d_kernel, kernelSizeBytes); // Allocate kernel on GPU
+    cudaMalloc(&d_output, imageSize);       // Allocate output on GPU
+    
+    // Step 2: Copy data CPU → GPU (SLOW! ~8 GB/s)
+    cudaMemcpy(d_input, in.data, imageSize, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_kernel, kernel.data(), kernelSizeBytes, cudaMemcpyHostToDevice);
+    
+    // Step 3: Launch kernel on GPU (FAST! Parallel computation)
+    dim3 blockSize(16, 16);  // 256 threads per block
+    dim3 gridSize((W + 15) / 16, (H + 15) / 16);
+    convolveKernel<<<gridSize, blockSize>>>(d_input, d_kernel, d_output, W, H, C, kernelSize);
+    
+    // Step 4: Wait for GPU to finish
+    cudaDeviceSynchronize();
+    
+    // Step 5: Copy result GPU → CPU (SLOW! ~8 GB/s)
+    cudaMemcpy(output.data, d_output, imageSize, cudaMemcpyDeviceToHost);
+    
+    // Step 6: Free GPU memory
+    cudaFree(d_input);
+    cudaFree(d_kernel);
+    cudaFree(d_output);
+    
+    return st.elapsedMs();  // Total time (includes transfer + compute)
+}
+```
+
+#### **Timing Breakdown Example (512×512 RGB image, 5×5 kernel):**
+
+```
+Image size: 512 × 512 × 3 channels × 4 bytes = 3,145,728 bytes ≈ 3 MB
+
+Step 1: Allocate GPU memory         ~0.1 ms
+Step 2: CPU → GPU transfer          ~3.0 ms  (3 MB @ 1 GB/s effective)
+Step 3: GPU kernel execution        ~0.3 ms  (896 cores in parallel!)
+Step 4: Synchronization             ~0.01 ms
+Step 5: GPU → CPU transfer          ~3.0 ms  (3 MB @ 1 GB/s effective)
+Step 6: Free GPU memory             ~0.1 ms
+────────────────────────────────────────────
+Total:                              ~6.5 ms
+
+For comparison:
+- CPU time: ~120 ms
+- OMP(8) time: ~18 ms
+- CUDA time: ~6.5 ms → 18× faster than CPU!
+```
+
+**Key Observation:**
+- Transfer: 6 ms (92% of time!)
+- Compute: 0.3 ms (only 5% of time!)
+- **For small images, transfer overhead dominates**
+- **For large images (4K), compute time increases but transfer is amortized**
+
+---
+
+### Performance Prediction Table
+
+Expected performance on your system (GTX 1650, Ryzen 7 4800H):
+
+| Image Size | Pixels | CPU Time | OMP(8) | CUDA Time | CUDA Speedup | Notes |
+|------------|--------|----------|--------|-----------|--------------|-------|
+| 256×256 | 65K | 30 ms | 6 ms | **25 ms** | **1.2×** | Transfer overhead > compute |
+| 512×512 | 262K | 120 ms | 18 ms | **6.5 ms** | **18×** | Sweet spot |
+| 1024×1024 | 1M | 480 ms | 72 ms | **15 ms** | **32×** | GPU dominates |
+| 1920×1080 (FHD) | 2M | 900 ms | 135 ms | **25 ms** | **36×** | Large images benefit most |
+| 3840×2160 (4K) | 8M | 3600 ms | 540 ms | **80 ms** | **45×** | GPU shines! |
+
+**Kernel Size Impact:**
+
+| Kernel | Ops/Pixel | CPU (512²) | CUDA (512²) | Speedup |
+|--------|-----------|------------|-------------|---------|
+| 3×3 | 9 | 80 ms | 5 ms | 16× |
+| 5×5 | 25 | 120 ms | 6.5 ms | 18× |
+| 9×9 | 81 | 350 ms | 9 ms | 39× |
+| 15×15 | 225 | 950 ms | 15 ms | 63× |
+| 31×31 | 961 | 4200 ms | 45 ms | **93×** |
+
+**Trend:** Larger kernels → Better CUDA speedup (compute time dominates transfer)
+
+---
+
+### CUDA Programming Concepts
+
+#### **1. Kernel Function (`__global__`)**
+
+```cpp
+// __global__ = Callable from CPU, runs on GPU
+__global__ void myKernel(float* data, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < size) {
+        data[idx] *= 2.0f;  // Each thread doubles one element
+    }
+}
+```
+
+**Key Points:**
+- `__global__`: Kernel function (entry point on GPU)
+- Return type must be `void`
+- Cannot use C++ standard library (no `std::vector`, `std::cout`, etc.)
+- Can use CUDA math functions (`__expf`, `__sinf`, etc.)
+
+#### **2. Device Functions (`__device__`)**
+
+```cpp
+// Helper function that runs on GPU, called by kernel
+__device__ float clamp(float val, float min, float max)
+{
+    return fminf(fmaxf(val, min), max);
+}
+
+__global__ void processKernel(float* data)
+{
+    int idx = threadIdx.x;
+    data[idx] = clamp(data[idx], 0.0f, 255.0f);  // OK: __device__ calls __device__
+}
+```
+
+#### **3. Synchronization (`__syncthreads()`)**
+
+```cpp
+__global__ void exampleKernel()
+{
+    __shared__ float sharedData[256];
+    
+    // Each thread writes to shared memory
+    sharedData[threadIdx.x] = threadIdx.x * 2.0f;
+    
+    __syncthreads();  // ← BARRIER: Wait for ALL threads in block
+    
+    // Now safe to read (all threads have finished writing)
+    float val = sharedData[(threadIdx.x + 1) % 256];
+}
+```
+
+**Critical Rules:**
+- `__syncthreads()` synchronizes **only threads within same block**
+- **NOT across different blocks** (blocks execute independently)
+- Must be called by **all threads** in block (not inside `if` branch that some threads don't take)
+- Used after writing to Shared Memory before reading
+
+#### **4. Kernel Launch Syntax**
+
+```cpp
+// Syntax: kernel<<<gridDim, blockDim, sharedMemSize, stream>>>(args...)
+
+dim3 blockSize(16, 16);      // 2D block: 16×16 = 256 threads
+dim3 gridSize(32, 32);       // 2D grid: 32×32 = 1024 blocks
+
+myKernel<<<gridSize, blockSize>>>(arg1, arg2);
+// Launches 1024 blocks × 256 threads = 262,144 threads
+
+// Can also use integers for 1D:
+myKernel<<<256, 512>>>(arg1, arg2);  // 256 blocks × 512 threads
+```
+
+#### **5. Error Checking (Essential!)**
+
+CUDA functions return error codes, but kernel launches don't. Always check:
+
+```cpp
+// Check CUDA API calls
+cudaError_t err = cudaMalloc(&d_ptr, size);
+if (err != cudaSuccess) {
+    std::cerr << "cudaMalloc failed: " << cudaGetErrorString(err) << "\n";
+    return;
+}
+
+// Check kernel launch
+myKernel<<<grid, block>>>(args);
+cudaError_t kernelErr = cudaGetLastError();  // Check launch error
+if (kernelErr != cudaSuccess) {
+    std::cerr << "Kernel launch failed: " << cudaGetErrorString(kernelErr) << "\n";
+}
+
+cudaDeviceSynchronize();  // Wait for kernel
+cudaError_t syncErr = cudaGetLastError();  // Check execution error
+if (syncErr != cudaSuccess) {
+    std::cerr << "Kernel execution failed: " << cudaGetErrorString(syncErr) << "\n";
+}
+```
+
+---
+
+### Common CUDA Pitfalls
+
+| Pitfall | Symptom | Solution |
+|---------|---------|----------|
+| **Memory leaks** | GPU memory runs out after repeated runs | Always `cudaFree()` after `cudaMalloc()` |
+| **Forgot synchronization** | Incorrect results, race conditions | Use `__syncthreads()` after Shared Memory writes |
+| **Missing boundary checks** | Segmentation fault, invalid memory access | Always check `if (x >= W \|\| y >= H) return;` |
+| **Warp divergence** | Poor performance, threads idle | Minimize branching (`if` statements) in kernels |
+| **Uncoalesced memory access** | 10-100× slower than expected | Access consecutive memory addresses in warps |
+| **Bank conflicts** | Shared Memory accesses serialize | Use padding or different access patterns |
+| **Too many registers** | Low occupancy (few blocks per SM) | Reduce local variables, use Shared Memory |
+| **Deadlock** | Kernel hangs | Ensure all threads in block call `__syncthreads()` |
+| **Host-Device confusion** | Segmentation fault | CPU can't access `d_ptr`, GPU can't access `h_ptr` |
+
+---
+
+### Optimization Strategies
+
+#### **1. Occupancy**
+
+**Definition:** Percentage of maximum threads actually running on SM.
+
+```
+Occupancy = (Active Warps per SM) / (Maximum Warps per SM)
+
+GTX 1650: Max 32 warps per SM (1024 threads / 32 threads per warp)
+
+Example:
+- If kernel uses too many registers → Only 16 warps can fit → 50% occupancy
+- Low occupancy → Underutilized GPU → Poor performance
+```
+
+**Goal:** Aim for >50% occupancy (use `nvcc --ptxas-options=-v` to check register usage)
+
+#### **2. Memory Coalescing**
+
+**Bad (Strided Access):**
+```cpp
+// Threads access every 4th element
+int idx = threadIdx.x * 4;  // 0, 4, 8, 12, ...
+float val = data[idx];  // ❌ 4 separate memory transactions per warp
+```
+
+**Good (Consecutive Access):**
+```cpp
+// Threads access consecutive elements
+int idx = threadIdx.x;  // 0, 1, 2, 3, ...
+float val = data[idx];  // ✅ 1 memory transaction per warp (coalesced)
+```
+
+#### **3. Shared Memory Banking**
+
+Shared Memory is divided into 32 banks. If multiple threads access same bank → serialization.
+
+**Bad (Bank Conflict):**
+```cpp
+__shared__ float shared[32];
+// All threads access same bank
+float val = shared[threadIdx.x % 32];  // ❌ 32-way bank conflict
+```
+
+**Good (No Conflict):**
+```cpp
+__shared__ float shared[32];
+// Each thread accesses different bank
+float val = shared[threadIdx.x];  // ✅ No conflict
+```
+
+#### **4. Constant Memory for Kernel**
+
+For read-only data (like convolution kernel), use Constant Memory:
+
+```cpp
+__constant__ float d_kernel[961];  // Max 31×31 kernel
+
+// Copy to constant memory (special API)
+cudaMemcpyToSymbol(d_kernel, h_kernel, size);
+
+__global__ void convolveKernel(float* input, float* output)
+{
+    // Read from constant memory (cached, broadcast to all threads)
+    float kval = d_kernel[idx];  // ✅ Fast broadcast
+}
+```
+
+**Benefits:**
+- Cached in Constant Cache (fast)
+- Broadcast to all threads in warp (single read)
+- Best for kernels ≤64 KB (your 31×31 kernel = 3.8 KB ✓)
+
+---
+
+### Summary: CPU vs OpenMP vs CUDA
+
+| Aspect | CPU | OpenMP (CPU) | CUDA (GPU) |
+|--------|-----|--------------|------------|
+| **Cores** | 8 | 8 | 896 |
+| **Threads** | 1 | 8-16 | 262,144+ |
+| **Clock Speed** | 2.9-4.2 GHz | 2.9-4.2 GHz | 1.5-1.7 GHz |
+| **Memory** | 32 GB DDR4 | 32 GB DDR4 (shared) | 4 GB GDDR6 (separate) |
+| **Memory Bandwidth** | ~25 GB/s | ~25 GB/s | ~128 GB/s |
+| **Best For** | Complex logic, branching | Medium parallelism | Massive parallelism |
+| **Speedup (512²)** | 1× (baseline) | 5-7× | 15-20× |
+| **Speedup (4K)** | 1× | 6-7× | 40-50× |
+| **Overhead** | 0 ms | ~1 ms | ~10 ms (transfer) |
+| **Programming Difficulty** | Easy | Easy | **Hard** |
+
+---
+
+## Key Takeaways
+
+1. **CUDA = Massive parallelism** (896 cores vs 8 CPU cores)
+2. **Each thread processes 1 pixel** (262,144 threads for 512×512 image)
+3. **Memory hierarchy is critical** (Shared Memory optimization = 20× speedup)
+4. **Transfer overhead significant** (~10 ms PCIe latency)
+5. **Best for large images** (4K shows 40-50× speedup over CPU)
+6. **Manual memory management** required (cudaMalloc/cudaMemcpy/cudaFree)
+7. **Shared Memory tiling** reduces Global Memory accesses
+8. **Coalesced memory access** essential for bandwidth efficiency
+9. **Synchronization** (`__syncthreads()`) required for correctness
+10. **Error checking** essential (GPU errors are silent without checks)
+
+---
+
+### Questions to Confirm Understanding
+
+Before implementing, verify you understand:
+
+1. **Thread-to-pixel mapping**: How does `blockIdx` and `threadIdx` calculate pixel position?
+2. **Shared Memory tiling**: Why load (16+4)×(16+4) tile for 16×16 output with 5×5 kernel?
+3. **Memory transfer**: Why does `convolveCUDA()` include transfer time in benchmark?
+4. **Synchronization**: When and why do we call `__syncthreads()`?
+5. **Performance trade-off**: Why are small images slower on GPU than CPU?
+
+Once confirmed, we'll implement `convolutionCuda.cu` step-by-step!
+
+---
+
+*Last updated: Before CUDA implementation*
+
