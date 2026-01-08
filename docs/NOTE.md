@@ -2954,3 +2954,652 @@ if (utils::imagesNearEqual(ref, out, 1e-2, &maxd, &mse)) {
 
 *Last updated: During utils.hpp implementation*
 
+---
+
+## 18. OpenMP Multi-Threading Theory & Implementation
+
+### What is OpenMP?
+
+**OpenMP** = **Open Multi-Processing**
+
+It's a **directive-based API** for **shared-memory parallelism** in C/C++/Fortran. Instead of manually creating threads (like pthread or std::thread), you use special compiler directives (pragmas) that tell the compiler:
+
+> *"Run this loop across multiple CPU cores simultaneously"*
+
+**Key Benefits:**
+- ✅ Simple: Add one line (`#pragma omp parallel for`) to parallelize loops
+- ✅ Portable: Works on Windows (MSVC), Linux (GCC/Clang), macOS
+- ✅ Efficient: Compiler optimizes thread creation/scheduling
+- ✅ Safe: Compiler helps prevent race conditions
+
+**Hardware Context (Your System):**
+- CPU: AMD Ryzen 7 4800H
+- Physical Cores: 8
+- Logical Threads: 16 (with SMT/HyperThreading)
+- Memory: 32GB DDR4 @ 3200 MHz (~25 GB/s bandwidth)
+
+---
+
+### How OpenMP Parallelizes Convolution
+
+#### Mental Model: The Paper Stamping Analogy
+
+Imagine you have **1000 papers** to stamp:
+
+**Single-threaded (convolveCPU):**
+```
+You (1 worker) stamps all papers sequentially:
+Paper 0 → Paper 1 → Paper 2 → ... → Paper 999
+Total time: 1000 seconds
+```
+
+**Multi-threaded (convolveOMP with 8 threads):**
+```
+You hire 7 friends (8 workers total):
+Worker 0: Papers 0-124    (125 papers)
+Worker 1: Papers 125-249  (125 papers)
+Worker 2: Papers 250-374  (125 papers)
+...
+Worker 7: Papers 875-999  (125 papers)
+
+All workers stamp simultaneously!
+Total time: ~125 seconds (8× faster in theory)
+```
+
+**Translation to Convolution:**
+- "Papers" = **Image rows** (each row can be processed independently)
+- "Stamping" = **Convolving** (applying kernel to compute output pixels)
+- "Workers" = **CPU threads** (hardware execution units)
+
+---
+
+### Why Rows Are Independent (No Race Conditions)
+
+Look at the convolution loop structure:
+
+```cpp
+for(int y = 0; y < H; y++)          // ← Each row y is INDEPENDENT
+{
+    float* outRow = output.ptr<float>(y);  // ← Different pointer per row
+    for(int x = 0; x < W; x++) 
+    {
+        for(int c = 0; c < C; c++) 
+        {
+            // Compute output[y][x][c]
+            // Reads: input[y±half][x±half]  (shared, read-only ✓)
+            // Writes: output[y][x][c]        (unique per thread ✓)
+        }
+    }
+}
+```
+
+**Key Observations:**
+1. **Each thread processes different rows** → No two threads write to the same `y`
+2. **Reading input is safe** → Multiple threads can read the same input pixels simultaneously (no mutation)
+3. **Writing output is safe** → Thread 0 writes to `output[0-124]`, Thread 1 writes to `output[125-249]`, etc.
+4. **No synchronization needed** → No locks, mutexes, or atomic operations required
+
+**This is called "embarrassingly parallel"** - the easiest kind of parallelism!
+
+---
+
+### OpenMP Directives Explained
+
+#### Basic Parallelization
+
+```cpp
+#pragma omp parallel for
+for(int y = 0; y < H; y++) {
+    // Loop body
+}
+```
+
+**What happens:**
+1. Compiler creates a **team of threads** (default: number of CPU cores)
+2. Divides iterations `y = 0..H-1` among threads
+3. All threads execute simultaneously
+4. **Implicit barrier** at end: All threads must finish before continuing
+
+#### With Schedule Control
+
+```cpp
+#pragma omp parallel for schedule(static)
+for(int y = 0; y < H; y++) { ... }
+```
+
+**Schedule Types:**
+
+| Type | Description | Best For |
+|------|-------------|----------|
+| `static` | Fixed chunks: Thread 0 gets rows 0-124, Thread 1 gets 125-249, etc. Decided at compile time. | **Uniform workload** (all rows take same time) ← **Our case!** |
+| `dynamic` | Threads grab rows on-demand. Thread finishes row 5, immediately requests row 6. Runtime overhead. | **Variable workload** (some rows slower) |
+| `guided` | Like dynamic but chunk size decreases over time. Starts big, ends small. | **Load balancing** when workload unknown |
+| `auto` | Compiler/runtime decides best schedule | Let system optimize |
+
+**Why `static` for convolution?**
+- Every row has **identical workload**: `W × C × kernelSize²` operations
+- No load imbalance → Static has **lowest overhead** (no dynamic scheduling)
+- Best cache locality (consecutive rows for same thread)
+
+#### Thread Count Control
+
+```cpp
+if (numThreads > 0) {
+    omp_set_num_threads(numThreads);  // Set before parallel region
+}
+
+#pragma omp parallel for
+for(...) { ... }
+```
+
+**Thread Count Logic:**
+- `numThreads = 0` → Auto-detect (uses `omp_get_max_threads()`, usually = # of cores)
+- `numThreads = 1` → Serial execution (for testing: should match `convolveCPU` time)
+- `numThreads = 8` → Use 8 threads (one per physical core)
+- `numThreads = 16` → Use 16 threads (SMT/HyperThreading - usually no benefit for memory-bound tasks)
+
+**For your benchmark:**
+Test thread counts: 1, 2, 4, 8, 16 to measure scaling behavior
+
+---
+
+### Variable Sharing (Implicit vs Explicit)
+
+OpenMP automatically determines which variables are **shared** vs **private**:
+
+```cpp
+const int H = in.rows;        // Shared (read by all threads)
+const float* kp = kernel.data(); // Shared (read-only)
+
+#pragma omp parallel for
+for(int y = 0; y < H; y++)    // y is PRIVATE (each thread has own copy)
+{
+    float* outRow = output.ptr<float>(y);  // Private (depends on y)
+    for(int x = 0; x < W; x++)  // x is private
+    {
+        float sum = 0.0f;       // sum is private
+        // ...
+    }
+}
+```
+
+**Automatic Rules:**
+- Loop index (`y`) → **Private** (each thread needs own counter)
+- Variables declared inside loop → **Private** (stack-allocated per thread)
+- Variables declared outside loop → **Shared** (all threads see same memory)
+
+**Explicit Control (optional, for clarity):**
+```cpp
+#pragma omp parallel for shared(in, output, kernel, kp, H, W, C, half) private(x, c, ky, kx, sum, outRow, inRow)
+```
+
+Our code doesn't need explicit sharing (compiler infers correctly), but you can add it for documentation.
+
+---
+
+### Expected Performance - Theory vs Reality
+
+#### Ideal Speedup (Amdahl's Law)
+
+If 100% of code is parallelizable:
+```
+Speedup = Number of cores = 8×
+```
+
+**Reality:** You'll get **5-7× speedup** (not 8×). Why?
+
+#### Bottleneck 1: Memory Bandwidth
+
+**The Problem:**
+- Your 8 cores **share the same RAM** (~25 GB/s total bandwidth)
+- Convolution reads: `W × H × C × kernelSize²` pixels
+- Large images (e.g., 4K: 3840×2160) → **100+ MB of data**
+- If memory bandwidth is saturated → Cores wait idle for data
+
+**Memory Access Pattern:**
+```
+Core 0: Read input[0-124][...]     ↓
+Core 1: Read input[125-249][...]   ↓  All competing for 
+Core 2: Read input[250-374][...]   ↓  same 25 GB/s bandwidth
+...                                 ↓
+Core 7: Read input[875-999][...]   ↓
+```
+
+**Result:** Convolution is **memory-bound**, not **compute-bound**
+- Small kernels (3×3): More memory-bound → Lower speedup (~5×)
+- Large kernels (31×31): More compute-bound → Higher speedup (~7×)
+
+#### Bottleneck 2: Synchronization Overhead
+
+**Thread creation/destruction:**
+- Creating thread pool: ~1-2 ms
+- Barrier synchronization at loop end: ~0.1-0.5 ms
+- Context switching: ~0.01 ms per switch
+
+**Impact:**
+- Large images (2000×2000): Overhead negligible (~0.1% of total time)
+- Small images (100×100): Overhead significant (~10-20% of total time)
+
+**Rule of thumb:** Only use OpenMP for images > 500×500 pixels
+
+#### Bottleneck 3: Amdahl's Law (Serial Fraction)
+
+Not all code is parallelized:
+
+```cpp
+// SERIAL (only 1 thread):
+Validation: ~0.01 ms
+Float conversion: ~5 ms (for 1920×1080 image)
+Output allocation: ~1 ms
+
+// PARALLEL (8 threads):
+Convolution loops: ~100 ms → ~15 ms with 8 threads
+
+// SERIAL (only 1 thread):
+Return timing: ~0.001 ms
+```
+
+**Amdahl's Law Formula:**
+```
+Speedup = 1 / (Serial% + Parallel% / NumThreads)
+```
+
+**Example:** If 10% is serial, 90% is parallel:
+```
+Max Speedup = 1 / (0.1 + 0.9/8) = 1 / 0.2125 ≈ 4.7×
+```
+
+Even with infinite cores, max speedup is `1/0.1 = 10×` due to 10% serial portion.
+
+#### Bottleneck 4: Cache Effects
+
+**L1 Cache:** 32 KB per core (very fast, ~4 cycles)
+**L2 Cache:** 512 KB per core (fast, ~12 cycles)
+**L3 Cache:** 12 MB shared (slower, ~40 cycles)
+**RAM:** 32 GB (slow, ~100-300 cycles)
+
+**Cache Thrashing:**
+- Each thread processes different rows → Different data in cache
+- Kernel weights are shared → Good (all threads hit L3 cache)
+- Input image is huge → Doesn't fit in cache → Many cache misses
+
+**Result:** More threads = More cache pressure = Lower speedup
+
+---
+
+### Performance Prediction Table
+
+| Threads | Theoretical Speedup | Expected Real Speedup | Notes |
+|---------|---------------------|----------------------|-------|
+| 1 | 1.0× | 1.0× | Baseline (should match `convolveCPU` ±5%) |
+| 2 | 2.0× | 1.9× | Near-linear (cache + bandwidth sufficient) |
+| 4 | 4.0× | 3.7× | Good scaling (still below bandwidth limit) |
+| 8 | 8.0× | **5.0-7.0×** | **Memory bandwidth bottleneck** |
+| 16 | 16.0× | 5.5-7.5× | Hyperthreading gives minimal benefit (memory-bound) |
+
+**Factors that improve speedup:**
+- ✅ Larger kernels (31×31 vs 3×3) → More compute, less memory-bound
+- ✅ Larger images (4K vs 640×480) → Overhead becomes negligible
+- ✅ Fewer channels (grayscale vs RGB) → Less data to transfer
+
+**Factors that reduce speedup:**
+- ❌ Small images (<500×500) → Overhead dominates
+- ❌ Small kernels (3×3) → Memory-bound
+- ❌ Many channels (RGB, 4-channel) → More memory traffic
+
+---
+
+### Common OpenMP Pitfalls (And Why Our Code Avoids Them)
+
+#### Pitfall 1: Race Condition
+
+**Problem:** Multiple threads write to the same memory location
+
+**Example (BAD CODE):**
+```cpp
+float globalSum = 0.0f;  // Shared variable!
+
+#pragma omp parallel for
+for(int i = 0; i < N; i++) {
+    globalSum += data[i];  // ❌ RACE CONDITION!
+}
+// Result: Random wrong answer
+```
+
+**Why our code is safe:**
+```cpp
+#pragma omp parallel for
+for(int y = 0; y < H; y++) {
+    float* outRow = output.ptr<float>(y);  // Each thread has different y
+    outRow[x * C + c] = sum;  // Each thread writes to different row
+}
+// ✓ No race condition: Each thread owns its rows
+```
+
+#### Pitfall 2: False Sharing
+
+**Problem:** Threads write to different variables in the same cache line (64 bytes), causing cache thrashing
+
+**Example (BAD CODE):**
+```cpp
+float results[8];  // Array in same cache line
+
+#pragma omp parallel for
+for(int i = 0; i < 8; i++) {
+    results[i] = compute();  // ❌ All in same 64-byte cache line!
+}
+// Result: Cache ping-pong between cores, slow!
+```
+
+**Why our code is safe:**
+```cpp
+for(int y = 0; y < H; y++) {
+    float* outRow = output.ptr<float>(y);  // Rows are far apart in memory!
+    // Row 0: address 0x1000
+    // Row 1: address 0x1000 + W*C*4 bytes (e.g., 0x4000)
+    // ✓ Different cache lines, no false sharing
+}
+```
+
+#### Pitfall 3: Nested Parallelism
+
+**Problem:** Parallelizing nested loops creates too many threads
+
+**Example (BAD CODE):**
+```cpp
+#pragma omp parallel for  // 8 threads
+for(int y = 0; y < H; y++) {
+    #pragma omp parallel for  // Another 8 threads PER ITERATION!
+    for(int x = 0; x < W; x++) {
+        // ❌ Now you have 8×8 = 64 threads competing!
+    }
+}
+// Result: Massive overhead, slower than serial!
+```
+
+**Why our code is safe:**
+```cpp
+#pragma omp parallel for  // Only parallelize outermost loop
+for(int y = 0; y < H; y++) {
+    for(int x = 0; x < W; x++) {  // Inner loops are serial PER THREAD
+        // ✓ Only 8 threads total
+    }
+}
+```
+
+#### Pitfall 4: Load Imbalance
+
+**Problem:** Some threads finish early, sit idle waiting for slow threads
+
+**Example (BAD CODE):**
+```cpp
+#pragma omp parallel for schedule(static)
+for(int y = 0; y < H; y++) {
+    if (y < H/2) {
+        // Top half: Quick processing (1ms per row)
+    } else {
+        // Bottom half: Slow processing (10ms per row)
+    }
+}
+// Thread 0-3 finish early, wait for Thread 4-7
+```
+
+**Why our code is safe:**
+- Every row has **identical workload**: `W × C × kernelSize²` operations
+- Static schedule is optimal (lowest overhead, perfect load balance)
+
+---
+
+### Implementation Review: convolveOMP()
+
+#### Complete Code Analysis
+
+```cpp
+#include <omp.h>              // ← OpenMP API
+#include <opencv2/opencv.hpp>
+#include <vector>
+#include <stdexcept>
+#include "convolution.hpp"
+#include "timer.hpp"
+#include "utils.hpp"
+
+double convolveOMP(const cv::Mat& input, const std::vector<float>& kernel, 
+                   int kernelSize, cv::Mat& output, int numThreads)
+{
+    // ========== SERIAL SECTION (Not Parallelized) ==========
+    
+    // 1. Validation
+    if(!utils::isValidKernel(kernel, kernelSize)) {
+        throw std::invalid_argument("Invalid kernel: size must be positive odd and match kernel vector length!");
+    }
+
+    // 2. Convert to float
+    cv::Mat in = utils::convertToFloat(input);
+    if(in.empty()) {
+        throw std::invalid_argument("Input image is empty or could not be converted to float!");
+    }
+
+    // 3. Allocate output
+    utils::ensureOutputLike(in, output, CV_32F);
+    
+    // 4. Extract dimensions
+    const int H = in.rows;
+    const int W = in.cols;
+    const int C = in.channels();
+    const int half = kernelSize / 2;
+    const float* kp = kernel.data();
+
+    // 5. Set thread count
+    if (numThreads > 0) {
+        omp_set_num_threads(numThreads);  // Must be BEFORE parallel region
+    }
+    // If numThreads == 0: Uses default (omp_get_max_threads(), usually = # cores)
+
+    // ========== PARALLEL SECTION ==========
+    
+    // 6. Start timing (includes thread creation overhead)
+    timer::ScopedTimer st;
+
+    // 7. THE MAGIC LINE: Parallelize outer loop
+    #pragma omp parallel for schedule(static)
+    for(int y = 0; y < H; y++)  // ← Each thread processes different rows
+    {
+        float* outRow = output.ptr<float>(y);  // Row pointer (private per thread)
+        
+        for(int x = 0; x < W; x++) 
+        {
+            for(int c = 0; c < C; c++) 
+            {
+                float sum = 0.0f;  // Private variable (stack-allocated per thread)
+
+                // Kernel convolution
+                for(int ky = -half; ky <= half; ky++) 
+                {
+                    int iy = y + ky;
+                    if (iy < 0 || iy >= H) continue;  // Zero-padding
+
+                    const float* inRow = in.ptr<float>(iy);  // Private pointer
+                    int krow = (ky + half) * kernelSize;
+
+                    for(int kx = -half; kx <= half; kx++) 
+                    {
+                        int ix = x + kx;
+                        if(ix < 0 || ix >= W) continue;  // Zero-padding
+                        
+                        float val = inRow[ix * C + c];      // Read input (shared, safe)
+                        float kval = kp[krow + (kx + half)]; // Read kernel (shared, safe)
+                        sum += val * kval;
+                    }
+                }
+
+                outRow[x * C + c] = sum;  // Write output (unique per thread, safe)
+            }
+        }
+    }
+    // ← Implicit barrier here: All threads must finish before continuing
+
+    // ========== SERIAL SECTION ==========
+    
+    // 8. Return elapsed time
+    return st.elapsedMs();  // Includes thread creation + computation + synchronization
+}
+```
+
+#### What Makes This Implementation Correct:
+
+✅ **Thread Safety:**
+- Each thread processes different `y` values → No overlapping writes
+- Input/kernel are read-only → Safe for concurrent access
+- No shared mutable state
+
+✅ **Optimal Parallelization:**
+- Only outermost loop is parallelized (no nested parallelism)
+- Static schedule (lowest overhead for uniform workload)
+- Thread count configurable (for benchmarking 1, 2, 4, 8, 16 threads)
+
+✅ **Timing Accuracy:**
+- Timer wraps entire parallel region (realistic benchmark)
+- Includes thread creation/destruction overhead
+- Includes synchronization barrier overhead
+
+✅ **Memory Access Pattern:**
+- Row-major access (cache-friendly)
+- Kernel pointer optimization (`kp = kernel.data()`)
+- Row pointer optimization (`outRow`, `inRow`)
+
+✅ **Correctness:**
+- Identical algorithm to `convolveCPU` (deterministic results)
+- `numThreads=1` should give same time as `convolveCPU` (±5% variance)
+
+---
+
+### Testing Strategy
+
+#### Test 1: Correctness (Results Match)
+
+```cpp
+cv::Mat img = utils::loadImage("test.png");
+std::vector<float> kernel = kernels::createGaussianFilter(5).data;
+
+cv::Mat outCPU, outOMP;
+convolveCPU(img, kernel, 5, outCPU);
+convolveOMP(img, kernel, 5, outOMP, 8);
+
+// Results should be bit-identical (same floating-point operations)
+double maxDiff, mse;
+bool match = utils::imagesNearEqual(outCPU, outOMP, 1e-5, &maxDiff, &mse);
+std::cout << "CPU vs OMP match: " << (match ? "YES" : "NO") 
+          << " (maxDiff=" << maxDiff << ", mse=" << mse << ")\n";
+// Expected: maxDiff < 1e-5 (nearly zero, floating-point precision)
+```
+
+#### Test 2: Serial Equivalence (1 Thread = CPU Time)
+
+```cpp
+// OMP with 1 thread should match CPU time (within ~5% due to timing variance)
+double cpuTime = convolveCPU(img, kernel, 5, outCPU);
+double omp1Time = convolveOMP(img, kernel, 5, outOMP1, 1);
+
+double diff = std::abs(cpuTime - omp1Time);
+double relDiff = diff / cpuTime;
+std::cout << "CPU time: " << cpuTime << " ms\n";
+std::cout << "OMP(1 thread) time: " << omp1Time << " ms\n";
+std::cout << "Relative difference: " << (relDiff * 100) << "%\n";
+// Expected: relDiff < 0.05 (within 5%)
+```
+
+#### Test 3: Speedup Measurement
+
+```cpp
+// Test thread counts: 1, 2, 4, 8, 16
+int threadCounts[] = {1, 2, 4, 8, 16};
+double cpuTime = convolveCPU(img, kernel, 5, outCPU);
+
+std::cout << "Threads | Time (ms) | Speedup\n";
+std::cout << "--------|-----------|--------\n";
+std::cout << "CPU     | " << cpuTime << " | 1.00×\n";
+
+for (int t : threadCounts) {
+    cv::Mat outOMP;
+    double ompTime = convolveOMP(img, kernel, 5, outOMP, t);
+    double speedup = cpuTime / ompTime;
+    std::cout << t << "       | " << ompTime << " | " << speedup << "×\n";
+}
+
+// Expected output (example for 1920×1080 image, 5×5 kernel):
+// Threads | Time (ms) | Speedup
+// --------|-----------|--------
+// CPU     | 120.5     | 1.00×
+// 1       | 121.2     | 0.99×  (essentially same as CPU)
+// 2       | 63.4      | 1.90×
+// 4       | 32.1      | 3.75×
+// 8       | 18.7      | 6.44×  ← Memory bandwidth bottleneck
+// 16      | 17.9      | 6.73×  (minimal benefit from SMT)
+```
+
+#### Test 4: Kernel Size Impact
+
+```cpp
+// Larger kernels should show better speedup (more compute-bound)
+int kernelSizes[] = {3, 5, 9, 15, 31};
+
+std::cout << "Kernel Size | CPU Time | OMP(8) Time | Speedup\n";
+std::cout << "------------|----------|-------------|--------\n";
+
+for (int ksize : kernelSizes) {
+    auto kernel = kernels::createGaussianFilter(ksize).data;
+    
+    cv::Mat outCPU, outOMP;
+    double cpuTime = convolveCPU(img, kernel, ksize, outCPU);
+    double ompTime = convolveOMP(img, kernel, ksize, outOMP, 8);
+    double speedup = cpuTime / ompTime;
+    
+    std::cout << ksize << "×" << ksize << "       | " 
+              << cpuTime << " | " << ompTime << " | " << speedup << "×\n";
+}
+
+// Expected trend:
+// - 3×3: ~5.0× speedup (memory-bound, 9 ops per pixel)
+// - 15×15: ~6.5× speedup (more compute, 225 ops per pixel)
+// - 31×31: ~7.0× speedup (compute-bound, 961 ops per pixel)
+```
+
+---
+
+### Benchmark Goals for Your Paper
+
+#### Figure 1: Speedup vs Thread Count
+X-axis: Number of threads (1, 2, 4, 8, 16)
+Y-axis: Speedup (relative to CPU)
+Lines: Different image sizes (640×480, 1920×1080, 3840×2160)
+
+**Expected result:**
+- Linear scaling up to 4 threads
+- Sublinear scaling 4→8 threads (memory bandwidth limit)
+- Plateau at 8→16 threads (no SMT benefit)
+
+#### Figure 2: Speedup vs Kernel Size
+X-axis: Kernel size (3×3, 5×5, 9×9, 15×15, 31×31)
+Y-axis: Speedup (8 threads vs CPU)
+Lines: Different image sizes
+
+**Expected result:**
+- Larger kernels → Better speedup (more compute-bound)
+- Asymptotic approach to ~7× (never reaches theoretical 8×)
+
+#### Figure 3: Efficiency Analysis
+X-axis: Number of threads
+Y-axis: Parallel efficiency (Speedup / NumThreads × 100%)
+- 100% = Perfect scaling
+- <100% = Sublinear scaling due to overhead/bottlenecks
+
+**Expected result:**
+- 1-2 threads: ~95% efficiency
+- 4 threads: ~90% efficiency
+- 8 threads: ~70-85% efficiency (memory bandwidth limit)
+- 16 threads: ~40-45% efficiency (SMT doesn't help memory-bound code)
+
+---
+
+*Last updated: After convolveOMP() implementation review*
+

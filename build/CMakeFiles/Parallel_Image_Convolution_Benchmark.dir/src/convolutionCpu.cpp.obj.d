@@ -365,4 +365,10 @@ CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolutionCpu.cpp.obj: 
  C:/msys64/ucrt64/include/opencv4/opencv2/stitching/detail/camera.hpp \
  C:/msys64/ucrt64/include/opencv4/opencv2/video.hpp \
  C:/msys64/ucrt64/include/opencv4/opencv2/video/tracking.hpp \
- C:/msys64/ucrt64/include/opencv4/opencv2/video/background_segm.hpp
+ C:/msys64/ucrt64/include/opencv4/opencv2/video/background_segm.hpp \
+ D:/HUST/GHWorkspace/Parallel_Image_Convolution_Benchmark/include/convolution.hpp \
+ D:/HUST/GHWorkspace/Parallel_Image_Convolution_Benchmark/include/utils.hpp \
+ C:/msys64/ucrt64/include/c++/15.2.0/numeric \
+ C:/msys64/ucrt64/include/c++/15.2.0/bits/stl_numeric.h \
+ C:/msys64/ucrt64/include/c++/15.2.0/pstl/glue_numeric_defs.h \
+ D:/HUST/GHWorkspace/Parallel_Image_Convolution_Benchmark/include/timer.hpp
