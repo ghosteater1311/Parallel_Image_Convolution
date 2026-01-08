@@ -46,7 +46,7 @@ int main()
     auto SharpendingFilter = kernels::createSharpen();
     std::cout << "Kernel: " << SharpendingFilter.name << " (" << SharpendingFilter.size << "x" << SharpendingFilter.size << ")\n";
 
-    // Cnvolve
+    // Convolve
     int sizes[] = {3, 5, 9, 15};
     for(int ksize : sizes) 
     {   
@@ -54,10 +54,12 @@ int main()
         std::cout << "Kernel: " << BoxFilter.name << " (" << BoxFilter.size << "x" << BoxFilter.size << ")\n";
         std::cout << "Kernel: " << ksize << "x" << ksize << "\n";
         
+        // CPU (Single Thread)
         cv::Mat outCPU;
         double cpuTime = convolveCPU(img, BoxFilter.data, BoxFilter.size, outCPU);
         std::cout << "CPU:     " << cpuTime << " ms\n";
         
+        // OMP (Multi-Threads)
         int threads[] = {1, 2, 4, 8, 16};
         for(int thread : threads) 
         {
