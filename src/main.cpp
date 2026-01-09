@@ -69,6 +69,17 @@ int main()
             
             std::cout << "OMP(" << thread << "):     " << ompTime << " ms  (Speedup: " << speedup << "x)\n";
         }
+        
+        // CUDA (GPU)
+        cv::Mat outCUDA;
+        double cudaTime = convolveCUDA(img, BoxFilter.data, BoxFilter.size, outCUDA);
+        double cudaSpeedup = cpuTime / cudaTime;
+        std::cout << "CUDA:    " << cudaTime << " ms  (Speedup: " << cudaSpeedup << "x)\n";
+        
+        // Verify correctness
+        bool cudaCorrect = utils::imagesNearEqual(outCPU, outCUDA, 1e-3);
+        std::cout << "CUDA correctness: " << (cudaCorrect ? "PASS" : "FAIL") << "\n";
+        std::cout << "\n";
     }
 
     return 0;

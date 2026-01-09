@@ -1,5 +1,0 @@
-# ninja log v6
-9	87	7851388547363805	CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/convolution.cpp.obj	501115748ab9010b
-14	89	7851388547399573	CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/utils.cpp.obj	40532e0fc687e2ac
-4	5108	7851388547302460	CMakeFiles/Parallel_Image_Convolution_Benchmark.dir/src/main.cpp.obj	8463dba3230870a4
-5111	5262	7851388598372529	Parallel_Image_Convolution_Benchmark.exe	be1bcdf389ad64f9

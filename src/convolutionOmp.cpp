@@ -8,18 +8,23 @@
 
 double convolveOMP(const cv::Mat& input, const std::vector<float>& kernel, int kernelSize, cv::Mat& output, int numThreads)
 {
+    // Validate Kernel
     if(!utils::isValidKernel(kernel, kernelSize)) 
     {
         throw std::invalid_argument("Invalid kernel: size must be positive odd and match kernel vector length!");
     }
 
+    // Convert input to float
     cv::Mat in = utils::convertToFloat(input);
     if(in.empty()) 
     {
         throw std::invalid_argument("Input image is empty or could not be converted to float!");
     }
 
+    // Ensure output is allocated 
     utils::ensureOutputLike(in, output, CV_32F);
+
+    // Extract dimensions
     const int H = in.rows;
     const int W = in.cols;
     const int C = in.channels();
@@ -27,13 +32,13 @@ double convolveOMP(const cv::Mat& input, const std::vector<float>& kernel, int k
 
     const float* kp = kernel.data();
 
-    // 4. Set thread count
+    // Set thread count
     if (numThreads > 0) 
     {
         omp_set_num_threads(numThreads);
     }
 
-    // Start timing
+    // Timing the whole convolution operation
     timer::ScopedTimer st;
 
     #pragma omp parallel for schedule(static)
