@@ -1,3 +1,0 @@
-D:/HUST/GHWorkspace/Parallel_Image_Convolution_Benchmark/build/CMakeFiles/Parallel_Image_Convolution_Benchmark.dir
-D:/HUST/GHWorkspace/Parallel_Image_Convolution_Benchmark/build/CMakeFiles/ALL_BUILD.dir
-D:/HUST/GHWorkspace/Parallel_Image_Convolution_Benchmark/build/CMakeFiles/ZERO_CHECK.dir
