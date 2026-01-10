@@ -21,7 +21,7 @@ This comprehensive research document includes:
 - **Practical recommendations** for production deployment
 - **Future work** and optimization strategies
 
-**Key Research Findings:**
+**Research Findings:**
 - ✅ CUDA achieves up to **29.48× speedup** on large kernels (11×11) with 4K images
 - ❌ CUDA becomes **11× slower** on small workloads due to ~100ms PCIe overhead
 - ✅ OpenMP delivers **consistent 6-7× speedup** with 78% parallel efficiency at 8 threads
