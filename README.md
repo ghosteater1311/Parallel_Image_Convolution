@@ -261,7 +261,7 @@ The benchmark evaluates 14 different convolution kernels across multiple categor
 
 ## 🎓 Research Contributions
 
-### 1. **Honest Performance Reporting**
+### 1. **Performance Reporting**
 - Documents CUDA's **11× slowdown** on small workloads, not just successes
 - Quantifies ~100ms PCIe transfer overhead as a fundamental limitation
 - Only 1-2% of PCIe Gen3 bandwidth utilized (latency bottleneck, not throughput)
