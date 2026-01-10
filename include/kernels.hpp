@@ -340,7 +340,15 @@ namespace kernels
             createLoG(9),
             createSharpen(),
             createHighPass(),
-            createGabor(11),
+            createGabor(11)
+        };
+    }
+
+    // Get all Large Scale Kernels For GPU stress test
+    inline std::vector<Kernel> getLargeKernelsForCUDA()
+    {
+        return
+        {
             createLargeBoxFilter(31),
             createLargeGaussianFilter(31)
         };

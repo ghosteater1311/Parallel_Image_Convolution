@@ -31,13 +31,6 @@ cd build\Release
 .\Parallel_Image_Convolution_Benchmark.exe
 
 # ============================================================
-# Alternative: Manual CMake build
-# ============================================================
-# cd build
-# cmake ..
-# cmake --build . --config Release
-
-# ============================================================
 # Clean and rebuild from scratch
 # ============================================================
 # cd "d:\HUST\GHWorkspace\Parallel_Image_Convolution_Benchmark"

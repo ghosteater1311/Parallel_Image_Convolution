@@ -3,3 +3,9 @@
 
 # VS Code settings
 /.vscode/
+
+# Build local
+/buildGuide.txt/
+
+# /script
+/script/

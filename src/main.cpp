@@ -6,81 +6,142 @@
 
 int main()
 {
-    // Load Image (absolute path for now)
-    cv::Mat img = utils::loadImage("d:/HUST/GHWorkspace/Parallel_Image_Convolution_Benchmark/image/standard/lena_512.png", cv::IMREAD_COLOR, CV_8U);
-    if(img.empty())
+    // Standard Image
+    // Load Image 
+    cv::Mat imgStandard = utils::loadImage("/image/standard/baboon_512.png", cv::IMREAD_COLOR, CV_8U);
+    if(imgStandard.empty())
     {
         std::cout << "Cannot load image!\n";
         return 1;
     }
-    std::cout << "Image loaded:" << img.cols << "x" << img.rows << "\n";
+    std::cout << "Image loaded (baboon_512): " << imgStandard.cols << "x" << imgStandard.rows << "\n";
 
-    // Create Kernels for test
-    // Box Filter
-    // auto BoxFilter = kernels::createBoxFilter(3);
-    // std::cout << "Kernel: " << BoxFilter.name << " (" << BoxFilter.size << "x" << BoxFilter.size << ")\n";
+    // Get all benchmark kernels
+    auto standardBenchmarkKernels = kernels::getAllBenchmarkKernels();
+    std::cout << "Testing " << standardBenchmarkKernels.size() << " standard kernels:\n\n";
 
-    // Gaussian Filter
-    auto GaussianFilter = kernels::createGaussianFilter(5);
-    std::cout << "Kernel: " << GaussianFilter.name << " (" << GaussianFilter.size << "x" << GaussianFilter.size << ")\n";
-
-    // Sobel X&Y
-    auto SobelX = kernels::createSobelX();
-    auto SobelY = kernels::createSobelY();
-    std::cout << "Kernel: " << "Sobel X&Y" << " (" << SobelX.size << "x" << SobelY.size << ")\n";
-
-    // Laplace 4-connect
-    auto Laplace4ConFilter = kernels::createLaplacian4();
-    std::cout << "Kernel: " << Laplace4ConFilter.name << " (" << Laplace4ConFilter.size << "x" << Laplace4ConFilter.size << ")\n";
-
-
-    // Laplace 8-connect
-    auto Laplace8ConFilter = kernels::createLaplacian8();
-    std::cout << "Kernel: " << Laplace8ConFilter.name << " (" << Laplace8ConFilter.size << "x" << Laplace8ConFilter.size << ")\n";
-
-    // LoG Filter
-    auto LoGFilter = kernels::createLoG(9, -1.0F);
-    std::cout << "Kernel: " << LoGFilter.name << " (" << LoGFilter.size << "x" << LoGFilter.size << ")\n";
-
-    // Sharpending Filter
-    auto SharpendingFilter = kernels::createSharpen();
-    std::cout << "Kernel: " << SharpendingFilter.name << " (" << SharpendingFilter.size << "x" << SharpendingFilter.size << ")\n";
-
-    // Convolve
-    int sizes[] = {3, 5, 9, 15};
-    for(int ksize : sizes) 
-    {   
-        auto BoxFilter = kernels::createBoxFilter(ksize);
-        std::cout << "Kernel: " << BoxFilter.name << " (" << BoxFilter.size << "x" << BoxFilter.size << ")\n";
-        std::cout << "Kernel: " << ksize << "x" << ksize << "\n";
+    // Test each kernel
+    for(const auto& kernel : standardBenchmarkKernels) 
+    {
+        std::cout << "Kernel: " << kernel.name << " (" << kernel.size << "x" << kernel.size << ")\n";
         
         // CPU (Single Thread)
         cv::Mat outCPU;
-        double cpuTime = convolveCPU(img, BoxFilter.data, BoxFilter.size, outCPU);
-        std::cout << "CPU:     " << cpuTime << " ms\n";
+        double cpuTime = convolveCPU(imgStandard, kernel.data, kernel.size, outCPU);
+        std::cout << "CPU:         " << cpuTime << " ms\n";
         
-        // OMP (Multi-Threads)
+        // OMP (Multi-Threads) - test with different thread counts
         int threads[] = {1, 2, 4, 8, 16};
         for(int thread : threads) 
         {
             cv::Mat outOMP;
-            double ompTime = convolveOMP(img, BoxFilter.data, BoxFilter.size, outOMP, thread);
+            double ompTime = convolveOMP(imgStandard, kernel.data, kernel.size, outOMP, thread);
             double speedup = cpuTime / ompTime;
             
-            std::cout << "OMP(" << thread << "):     " << ompTime << " ms  (Speedup: " << speedup << "x)\n";
+            std::cout << "OMP(" << thread << "):      " << ompTime << " ms  (Speedup: " << speedup << "x)\n";
         }
         
         // CUDA (GPU)
         cv::Mat outCUDA;
-        double cudaTime = convolveCUDA(img, BoxFilter.data, BoxFilter.size, outCUDA);
+        double cudaTime = convolveCUDA(imgStandard, kernel.data, kernel.size, outCUDA);
         double cudaSpeedup = cpuTime / cudaTime;
-        std::cout << "CUDA:    " << cudaTime << " ms  (Speedup: " << cudaSpeedup << "x)\n";
+        std::cout << "CUDA:        " << cudaTime << " ms  (Speedup: " << cudaSpeedup << "x)\n";
         
         // Verify correctness
         bool cudaCorrect = utils::imagesNearEqual(outCPU, outCUDA, 1e-3);
         std::cout << "CUDA correctness: " << (cudaCorrect ? "PASS" : "FAIL") << "\n";
         std::cout << "\n";
     }
+
+    // Synthetic Image
+    // Load Image 
+    cv::Mat imgSynthetic = utils::loadImage("/image/synthetic/noise_4096.png", cv::IMREAD_COLOR, CV_8U);
+    if(imgSynthetic.empty())
+    {
+        std::cout << "Cannot load image!\n";
+        return 1;
+    }
+    std::cout << "Image loaded (noise_4096): " << imgSynthetic.cols << "x" << imgSynthetic.rows << "\n";
+
+    // Get all benchmark kernels
+    auto syntheticBenchmarkKernels = kernels::getAllBenchmarkKernels();
+    std::cout << "Testing " << syntheticBenchmarkKernels.size() << " standard kernels:\n\n";
+
+    // Test each kernel
+    for(const auto& kernel : syntheticBenchmarkKernels) 
+    {
+        std::cout << "Kernel: " << kernel.name << " (" << kernel.size << "x" << kernel.size << ")\n";
+        
+        // CPU (Single Thread)
+        cv::Mat outCPU;
+        double cpuTime = convolveCPU(imgSynthetic, kernel.data, kernel.size, outCPU);
+        std::cout << "CPU:         " << cpuTime << " ms\n";
+        
+        // OMP (Multi-Threads) - test with different thread counts
+        int threads[] = {1, 2, 4, 8, 16};
+        for(int thread : threads) 
+        {
+            cv::Mat outOMP;
+            double ompTime = convolveOMP(imgSynthetic, kernel.data, kernel.size, outOMP, thread);
+            double speedup = cpuTime / ompTime;
+            
+            std::cout << "OMP(" << thread << "):      " << ompTime << " ms  (Speedup: " << speedup << "x)\n";
+        }
+        
+        // CUDA (GPU)
+        cv::Mat outCUDA;
+        double cudaTime = convolveCUDA(imgSynthetic, kernel.data, kernel.size, outCUDA);
+        double cudaSpeedup = cpuTime / cudaTime;
+        std::cout << "CUDA:        " << cudaTime << " ms  (Speedup: " << cudaSpeedup << "x)\n";
+        
+        // Verify correctness
+        bool cudaCorrect = utils::imagesNearEqual(outCPU, outCUDA, 1e-3);
+        std::cout << "CUDA correctness: " << (cudaCorrect ? "PASS" : "FAIL") << "\n";
+        std::cout << "\n";
+    }
+
+    // Large Resolution Image
+    // Load Image 
+    cv::Mat imgLarge = utils::loadImage("/image/large/city_4k.jpg", cv::IMREAD_COLOR, CV_8U);
+    if(imgLarge.empty())
+    {
+        std::cout << "Cannot load image!\n";
+        return 1;
+    }
+    std::cout << "Image loaded (city_4k): " << imgLarge.cols << "x" << imgLarge.rows << "\n";
+
+    // Test large kernels for GPU stress testing
+    std::cout << "GPU Stress Test - Large Kernels:\n\n";
+    
+    auto largeKernels = kernels::getLargeKernelsForCUDA();
+    
+    for(const auto& kernel : largeKernels) 
+    {
+        std::cout << "Kernel: " << kernel.name << " (" << kernel.size << "x" << kernel.size << ")\n";
+        
+        // OMP with maximum thread (16)
+        int threads = 16;;
+        double ompBestTime = 0.0;
+        cv::Mat outOMP;
+        cv::Mat outOMP_temp;
+        double ompTime = convolveOMP(imgLarge, kernel.data, kernel.size, outOMP_temp, threads);
+        std::cout << "OMP(" << threads << "):      " << ompTime << " ms\n";
+        ompBestTime = ompTime;
+        outOMP = outOMP_temp;
+      
+        // CUDA (GPU)
+        cv::Mat outCUDA;
+        double cudaTime = convolveCUDA(imgLarge, kernel.data, kernel.size, outCUDA);
+        double cudaVsOmpSpeedup = ompBestTime / cudaTime;
+        std::cout << "CUDA:        " << cudaTime << " ms  (vs OMP(16): " << cudaVsOmpSpeedup << "x)\n";
+        
+        // Verify correctness (compare CUDA against OMP)
+        bool cudaCorrect = utils::imagesNearEqual(outOMP, outCUDA, 1e-3);
+        std::cout << "CUDA correctness: " << (cudaCorrect ? "PASS" : "FAIL") << "\n";
+        std::cout << "\n";
+    }
+
+    std::cout << "Benchmark completed!\n";
 
     return 0;
 }
