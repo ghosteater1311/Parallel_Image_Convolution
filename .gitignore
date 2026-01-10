@@ -4,8 +4,8 @@
 # VS Code settings
 /.vscode/
 
-# Build local
-/buildGuide.txt/
+# Build guide file
+/buildGuide.txt
 
-# /script
+# Script directory
 /script/
