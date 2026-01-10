@@ -259,7 +259,7 @@ The benchmark evaluates 14 different convolution kernels across multiple categor
 | ≥2048×2048 | ≥9×9 | **CUDA** | Exponential CUDA advantage |
 | Any size | 31×31 | **CUDA** | Massive parallelism required |
 
-## 🎓 Key Research Contributions
+## 🎓 Research Contributions
 
 ### 1. **Honest Performance Reporting**
 - Documents CUDA's **11× slowdown** on small workloads, not just successes
