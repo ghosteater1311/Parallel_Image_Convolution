@@ -322,7 +322,6 @@ cv::Mat convolveAdaptive(const cv::Mat& img, const float* kernel, int kSize) {
 
 - **📊 RESEARCH DOCUMENT (PRIMARY)**: **[Parallel_Image_Convolution_Research_Document_(NguyenDucAnh).pdf](docs/Parallel_Image_Convolution_Research_Document_(NguyenDucAnh).pdf)** - Complete research paper with theoretical background, methodology, results, and analysis
 - **📈 Visualizations**: All 11 publication-quality graphs available in `result/` directory
-- **🔧 Build Guide**: See `build.txt` for detailed Windows + CUDA compilation steps
 - **📖 Implementation Theory**: OpenMP and CUDA architecture documented in `docs/NOTE.md`
 
 ## 🤝 Contributing
