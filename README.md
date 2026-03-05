@@ -361,7 +361,6 @@ See the [LICENSE](LICENSE) file for full details.
 - **NVIDIA** for CUDA Toolkit and documentation
 - **OpenMP** community for parallel programming standards
 - **OpenCV** for image processing capabilities
-- **Research guidance** from HUST faculty
 
 ## 📚 References
 
